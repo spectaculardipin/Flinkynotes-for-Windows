@@ -1,7 +1,7 @@
 'use strict';
-/* deckLayout.js — pure deck-window layout math (v3 clean-room, no Electron deps).
+/* deckLayout.js — pure deck-window layout math (no Electron deps).
  *
- * Protocol (kills the v2 feedback loops):
+ * Protocol (kills layout feedback loops):
  * - The renderer measures content with offset* ONLY (never getBoundingClientRect
  *   mid-transition, never window.innerWidth/innerHeight for budgeting) and
  *   reports zones in SCREEN space: screen = lastAppliedOrigin + offsetChain.
@@ -9,7 +9,7 @@
  * - Each zones message carries a generation counter; main ignores stale gens.
  * - Main unions in screen space directly — no origin translation, so identical
  *   content yields identical rects and the equality guard suppresses resizes.
- * - Right edge only (v3 scope): x is always edge-snapped. Y centers on
+ * - Right edge only: x is always edge-snapped. Y centers on
  *   rest<->fan crossings, otherwise glue-tracks content (sy + contentY const).
  */
 const { shinglePitch } = require('./geometry');

@@ -56,7 +56,7 @@ contextBridge.exposeInMainWorld('api', {
   onAllFilter: (cb) => ipcRenderer.on('all:filter', (_e, d) => cb(d)),
   onHomeView: (cb) => ipcRenderer.on('home:view', (_e, d) => cb(d)),
 
-  // v2 wellness
+  // wellness
   wellnessGet: () => ipcRenderer.invoke('wellness:get'),
   wellnessSummary: () => ipcRenderer.invoke('wellness:summary'),
   onWellness: (cb) => ipcRenderer.on('wellness:changed', () => cb()),

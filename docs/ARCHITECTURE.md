@@ -4,7 +4,7 @@ Production reference for the v1.0.0 codebase.
 Covers the runtime as built
 (`BUILD 2026-10-15.1`, Electron 33, zero runtime dependencies).
 Subsystem deep-dives live in [`TIMER.md`](TIMER.md) (break timer),
-[`V3-DECK.md`](V3-DECK.md) (deck reconstruction history),
+[`DECK.md`](DECK.md) (deck design and placement),
 [`FEATURE-PORTS.md`](FEATURE-PORTS.md) (feature ports) and
 [`THEME.md`](THEME.md) (theme mapping).
 

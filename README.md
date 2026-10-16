@@ -112,7 +112,7 @@ Deep dives live in [`docs/`](docs/):
   processes, windows, IPC contract, engines, storage, placement pipeline,
   conventions, testing, build & release.
 - [`docs/TIMER.md`](docs/TIMER.md) — break-timer subsystem in depth.
-- [`docs/V3-DECK.md`](docs/V3-DECK.md) — note-deck reconstruction notes.
+- [`docs/DECK.md`](docs/DECK.md) — note-deck design and placement notes.
 - [`docs/FEATURE-PORTS.md`](docs/FEATURE-PORTS.md) — feature ports.
 - [`docs/THEME.md`](docs/THEME.md) — theme mapping.
 

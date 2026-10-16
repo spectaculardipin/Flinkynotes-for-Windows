@@ -23,7 +23,7 @@
 </div>
 
 <script>
-/* v3 deck — clean-room rewrite (right edge only).
+/* deck — edge-docked note rail (right edge only).
  * Layout rules that keep the native window stable:
  *  1. Measure with offset* ONLY. No getBoundingClientRect for placement,
  *     zones, or hit-testing (rects include CSS transforms; measuring
@@ -199,11 +199,11 @@
         // Reserved for the whole fan session (NOT hover-gated): widening the
         // native window on hover-enter and shrinking on leave teleports it
         // ~206px instantly (setBounds has no transition) — that flash is the
-        // v2-killer bug class. Grow piggybacks the wake motion and shrink
+        // hover-teleport bug class. Grow piggybacks the wake motion and shrink
         // rides the fold instead; hovers then cost zero resizes. Swift fold
-        // (260ms) frees underlying buttons fast — no edge deck can show
-        // content at the corner without covering it while open (v1 covered
-        // 352px full height), so speed of dismissal IS the clickability fix.
+        // (260ms) frees underlying buttons fast — an edge deck cannot show
+        // content at the corner without covering it while open, so speed
+        // of dismissal IS the clickability fix.
         const slot = range
           ? { x: Math.round(range.right - PREVIEW_W), y: Math.round(range.top), width: PREVIEW_W, height: Math.round(range.bottom - range.top) }
           : null;

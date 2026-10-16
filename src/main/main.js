@@ -133,13 +133,13 @@ function mkWin(name, file, opts, show = false) {
 }
 
 /* ---------- deck: the native window hugs visible content ----------
-   v3 protocol (see deckLayout.js + deck.html header):
+   deck protocol (see deckLayout.js + deck.html header):
    - Renderer reports WINDOW-LOCAL content rects (offset*-measured, never
      innerWidth/innerHeight, never client rects) with a generation counter.
    - Main translates by its own bounds origin (self-consistent: identical
      content → identical screen union → the equality guard suppresses
      resizes, so hovers cost zero native resizes).
-   - Right edge only (v3 scope). Rest, wakes, and structural changes center
+   - Right edge only. Rest, wakes, and structural changes center
      on the screen center; preview show/hide glues so cards never jump.
    - Fold owner is the renderer (it sees the pointer). Main only WAKES via
      the edge poll below; there is deliberately no watchdog fold — two fold
@@ -232,7 +232,7 @@ function ensureDeck() {
   if (wins.deck && !wins.deck.isDestroyed()) return wins.deck;
   const disp = cursorDisplay();
   const wa = (disp && disp.workArea) || screen.getPrimaryDisplay().workArea;
-  // Right edge only (v3 scope): 24px boot rect, vertically centered.
+  // Right edge only: 24px boot rect, vertically centered.
   const b = { x: wa.x + wa.width - 24, y: Math.round(wa.y + wa.height / 2 - 66), width: 24, height: 132 };
   const w = new BrowserWindow({
     ...b, show: false, frame: false, transparent: true, hasShadow: false,
@@ -737,7 +737,7 @@ function registerIpc() {
     } catch {}
   });
 
-  // v2 wellness
+  // wellness
   ipcMain.handle('wellness:get', () => wellness.today());
   ipcMain.handle('wellness:summary', () => wellness.summary());
   // Productivity report: completed pomodoros today / last 7 days / last 30.
@@ -1033,7 +1033,7 @@ app.whenReady().then(async () => {
       settings.set('features', feat);
     }
   } catch {}
-  // v3 starts fresh (per user choice): no migration from v1/v2 data dirs.
+  // Starts fresh: no migration from legacy data dirs.
   wellness = new WellnessStore(path.join(app.getPath('userData'), 'wellness.json'));
   registerIpc();
   registerShortcuts();

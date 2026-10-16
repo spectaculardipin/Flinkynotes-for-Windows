@@ -145,7 +145,7 @@ class FocusEngine {
     if (!this.s.enabled) return evts;
     if (now < this.pausedUntil) { this.remainingMs = this.pausedUntil - now; return evts; }
     if (guards.meeting) {
-      // defer: push deadline forward by tick amount (simple, drift-free enough for v1)
+      // defer: push deadline forward by tick amount (simple, drift-free enough)
       if (this.phase === 'focus') this.phaseEndsAt += (guards.tickMs || 1000);
       this.deferredReason = 'meeting';
       this.remainingMs = Math.max(0, this.phaseEndsAt - now);

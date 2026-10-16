@@ -334,6 +334,39 @@ t('no-third-party-names', () => {
     }
   }
   ['src', 'docs'].forEach(d => walk(path.join(root, d)));
+  // No version-history markers: the public tree must read as v1.0.0, never
+  // as an earlier build or a rebuild diary. Fragment-built so this guard's
+  // own source never contains the banned phrases (same idea as `banned`).
+  const bannedHist = new RegExp([
+    'V' + '3-DECK', 'v3-de' + 'ck', 'v3 sc' + 'ope', 'v3 prot' + 'ocol',
+    'v3 starts fr' + 'esh', 'v2 well' + 'ness', 'v2-kil' + 'ler',
+    'v2 feed' + 'back', 'Second bat' + 'ch', 'Third bat' + 'ch',
+    'Fourth bat' + 'ch', 'Still v' + '2', 'unchanged from v' + '2',
+    'rebuilds the note-de' + 'ck', 'clean-room rewrite on t' + 'op',
+    'no v1/v' + '2', 'v1 les' + 'son', 'v2 fix' + 'es',
+    'for v' + '1', 'kills the v' + '2',
+  ].join('|'), 'i');
+  function walkHist(d) {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name === '.git' || e.name === 'dist' || e.name === '.agents' || e.name === '.claude') continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) { if (p === path.join(root, 'tasks')) continue; walkHist(p); }
+      else if (/\.(js|html|css|json|md)$/.test(e.name)) {
+        const rel = path.relative(root, p);
+        if (rel === 'package-lock.json') continue;
+        fs.readFileSync(p, 'utf8').split('\n').forEach((ln, i) => {
+          if (bannedHist.test(ln)) offenders.push(`${rel}:${i + 1}:${ln.trim().slice(0, 120)}`);
+        });
+      }
+    }
+  }
+  ['src', 'docs'].forEach(d => walkHist(path.join(root, d)));
+  for (const f of ['README.md', 'package.json']) {
+    const p = path.join(root, f);
+    fs.readFileSync(p, 'utf8').split('\n').forEach((ln, i) => {
+      if (bannedHist.test(ln)) offenders.push(`${f}:${i + 1}:${ln.trim().slice(0, 120)}`);
+    });
+  }
   for (const f of ['README.md', 'package.json']) {
     const p = path.join(root, f);
     fs.readFileSync(p, 'utf8').split('\n').forEach((ln, i) => {
@@ -350,7 +383,7 @@ t('no-third-party-names', () => {
   // fragment-built, so tests/run.js scans clean with no exemption needed.
   const selfTxt = fs.readFileSync(__filename, 'utf8');
   selfTxt.split('\n').forEach((ln, i) => {
-    if (banned.test(ln)) offenders.push(`tests/run.js:${i + 1}:${ln.trim().slice(0, 120)}`);
+    if (banned.test(ln) || bannedHist.test(ln)) offenders.push(`tests/run.js:${i + 1}:${ln.trim().slice(0, 120)}`);
   });
   assert.strictEqual(offenders.join('\n'), '', 'third-party references:\n' + offenders.join('\n'));
 });

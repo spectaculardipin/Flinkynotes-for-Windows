@@ -348,7 +348,7 @@ small.mut { color: var(--muted); font-size: 12px; }
 .note.deleted { opacity: .38; filter: grayscale(.6); pointer-events: none; }
 .note.deleted .toast { pointer-events: auto; }
 /* The locked card must stay closable: X/pin keep clicks so a deleted note
-   can always be dismissed by hand (v1 lesson: ghost must be closable). */
+   can always be dismissed by hand. */
 .note.deleted header .hbtn { pointer-events: auto; }
 .note.deleted textarea { color: rgba(45,40,28,.45); }
 .fbtn {
@@ -530,7 +530,7 @@ label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; marg
 .capbox { background: var(--paper); border-radius: 14px; padding: 13px; border: 1px solid rgba(69,60,40,.25); box-shadow: none; }
 
 /* ============================================================
-   v2 fixes
+   Editor / floating-note fixes
    ============================================================ */
 
 /* Floating-note footer: wrap instead of clipping. At narrow widths the

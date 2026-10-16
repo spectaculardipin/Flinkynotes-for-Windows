@@ -5,4 +5,4 @@
 - **Fan:** 30px tabs, 40px lap shingle, pitch 56–106 sized to longest title, 3° lean (`rotate(-3deg)` right edge), 28px plus disc, 45ms stagger BackEase entrance, preview 120ms reveal / instant swap, tab never grows on hover.
 - **Menus/tooltips:** paper `#F51D1D21`, edge `#2EFFFFFF`, ink `#F0FFFFFF`, Segoe UI 12.5px, 9px radius, drop shadow 18/45%.
 - **Editor:** paper background, ink text, Segoe Script/Hand body 20px, header 52px drag (buttons `no-drag` — Electron swallows clicks in drag regions), footer 56px, 7px scrollbar, 8-dot footer palette.
-- **Home:** warm paper (`#f2efe6/#f7f4ec/#fff`), same switches/segments as v1, health ring + week bars in theme neutrals.
+- **Home:** warm paper (`#f2efe6/#f7f4ec/#fff`), same switches/segments, health ring + week bars in theme neutrals.
