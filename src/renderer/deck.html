@@ -1,0 +1,700 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Flinkynotes</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="deckRoot">
+  <div id="pill" aria-label="Notes deck"></div>
+
+  <div class="fan" id="fan"></div>
+  <div id="edgeRule"></div>
+
+  <div class="preview" id="preview">
+    <div class="pv-main">
+      <div class="pv-title" id="pvTitle"></div>
+      <div class="pv-meta" id="pvMeta"></div>
+      <div class="pv-text" id="pvText"></div>
+    </div>
+    <div class="pv-gutter"><span id="pvGutterLabel"></span></div>
+  </div>
+</div>
+
+<script>
+/* v3 deck — clean-room rewrite (right edge only).
+ * Layout rules that keep the native window stable:
+ *  1. Measure with offset* ONLY. No getBoundingClientRect for placement,
+ *     zones, or hit-testing (rects include CSS transforms; measuring
+ *     mid-entrance sized the window to phantom pixels and stuck it there).
+ *  2. NEVER read window.innerWidth/innerHeight. Width reference is
+ *     deckRoot.offsetWidth (layout truth); height budget is waH from
+ *     main via deck:get (the native height is zones-driven, so budgeting
+ *     off it is a feedback loop: pitch → tabs → zones → bounds → pitch…).
+ *  3. Zones are window-local content rects + a generation counter. Main
+ *     translates by its own bounds origin (self-consistent: identical
+ *     content → identical union → its equality guard suppresses resizes).
+ *  4. The preview slot is anchored to LAYOUT (rail boxes), never to the
+ *     window edge. The card is exactly tab-height and top-aligned to its
+ *     tab, so showing it never changes the union → zero resizes on hover.
+ *  5. Fold owner is the renderer (it sees the pointer). Main only WAKES
+ *     (edge poll → fan); its old 4s watchdog fold is gone — two fold
+ *     owners bounced wake→fold→wake.
+ */
+(() => {
+  const deckRoot = document.getElementById('deckRoot');
+  const pill = document.getElementById('pill');
+  const fan = document.getElementById('fan');
+  const edgeRule = document.getElementById('edgeRule');
+  const preview = document.getElementById('preview');
+  const pvTitle = document.getElementById('pvTitle');
+  const pvMeta = document.getElementById('pvMeta');
+  const pvText = document.getElementById('pvText');
+  const pvGutterLabel = document.getElementById('pvGutterLabel');
+
+  const MAX_TABS = 5;      // five full-size tabs, rest behind +N
+  const SHINGLE_LAP = 40;  // each tab laps 40px over the one before
+  const PITCH_MIN = 56, PITCH_MAX = 106, PITCH_FLOOR_SHORT = 36;
+  const PREVIEW_W = 264;
+  const ICON_RESERVE = 100; // +/settings/lock/clock discs + gaps, always budgeted
+
+  // ---- Paper/Dash/Ink triples ----
+  const NOTE_INKS = {
+    '#fce795': { dash: '#e0ad08', ink: '#3a3008' },
+    '#fbcfa6': { dash: '#e2762a', ink: '#422413' },
+    '#fac4d1': { dash: '#dc4570', ink: '#40161f' },
+    '#d9c7fa': { dash: '#7c4dee', ink: '#2a1b44' },
+    '#beddfa': { dash: '#2280d6', ink: '#13293a' },
+    '#b4e8d0': { dash: '#0e9b6e', ink: '#0f2e23' },
+    '#e3d3b4': { dash: '#a37b3c', ink: '#372c18' },
+    '#cbd6e2': { dash: '#4e6579', ink: '#1a242e' },
+  };
+  const inkOf = (paper) => NOTE_INKS[String(paper || '').toLowerCase()] || NOTE_INKS['#fce795'];
+
+  // ---- state ----
+  let notes = [];
+  let allNotes = [];
+  let stage = 'rest';
+  let keepOpen = false;
+  let hidePill = false;
+  let openIds = new Set();
+  let waH = 0; // screen work-area height from main; 0 until deck:get resolves
+  let loadSeq = 0;
+  let booted = false;
+  let zonesGen = 0; // monotonic: main ignores stale generations
+  let zonesQueued = false;
+  let hideTimer = null;
+  let pvHideTimer = null;
+  let pvShowTimer = null;
+  let lastPitch = 76; // fan strip used by the structural signature
+  let restLockedUntil = 0;
+  let hoverNid = null; // note id under the pointer (delegation; survives rebuilds)
+  let pvNote = null;
+  let pvTabEl = null;
+  let lastPointer = null;
+
+  // ---- helpers ----
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const titleOf = (n) => (n.title || String(n.body || '').split('\n').map(s => s.trim()).find(Boolean) || 'Untitled').slice(0, 60);
+  const ago = (t) => {
+    const ms = t instanceof Date ? t.getTime() : (typeof t === 'number' ? t : new Date(t || Date.now()).getTime());
+    const d = Number.isFinite(ms) ? Date.now() - ms : 0;
+    if (d < 60000) return 'just now';
+    if (d < 3600000) return Math.floor(d / 60000) + 'm ago';
+    if (d < 86400000) return Math.floor(d / 3600000) + 'h ago';
+    return Math.floor(d / 86400000) + 'd ago';
+  };
+  const clampNum = (v, a, b) => Math.min(Math.max(v, a), b);
+
+  // Document coords of el relative to deckRoot (offset chain; transform-free).
+  function offsetOf(el) {
+    if (!el || !el.offsetParent) return null;
+    let x = 0, y = 0, node = el;
+    while (node && node !== deckRoot) { x += node.offsetLeft; y += node.offsetTop; node = node.offsetParent; }
+    return { x: Math.round(x), y: Math.round(y), w: Math.round(el.offsetWidth), h: Math.round(el.offsetHeight) };
+  }
+
+  // ---- pitch: strip sized to the longest title (DeckGeom), guarded ----
+  const measureCtx = document.createElement('canvas').getContext('2d');
+  function shinglePitchPx(longestLabel, count, hasMore) {
+    const label = String(longestLabel || '').toUpperCase();
+    let w;
+    try {
+      measureCtx.font = '600 9.5px "Segoe Script","Segoe Print","Ink Free","Comic Sans MS",cursive';
+      w = measureCtx.measureText(label).width + label.length * 0.95 + 20;
+    } catch { w = label.length * 7 + 20; }
+    let pitch = Math.round(clampNum(w, PITCH_MIN, PITCH_MAX));
+    // Short-screen guard: shrink (never below floor) instead of overflowing.
+    // Budgeted against waH from main — never the zones-driven window height.
+    // Icon discs always reserve space, not just the +N row.
+    if (waH > 0) {
+      const n = Math.max(1, count);
+      const reserved = ICON_RESERVE + (hasMore ? 34 + 7 : 0);
+      const budget = waH * 0.68 - reserved;
+      if (n * pitch + SHINGLE_LAP > budget) pitch = Math.max(PITCH_FLOOR_SHORT, Math.floor((budget - SHINGLE_LAP) / n));
+    }
+    return pitch;
+  }
+
+  // ---- stage machine: one place flips CSS + notifies main ----
+  function paint(s) {
+    stage = s;
+    deckRoot.classList.toggle('rest', s === 'rest');
+    fan.classList.toggle('open', s !== 'rest');
+    pill.style.display = (s === 'rest' && !hidePill) ? '' : 'none';
+    if (s === 'rest') { hidePreview(); }
+    else requestAnimationFrame(() => { positionEdgeRule(); sendZonesSoon(); });
+    if (s === 'rest') sendZonesSoon();
+  }
+  function requestStage(s) {
+    if (keepOpen && s === 'rest') return;
+    if (stage === s) { paint(s); return; }
+    if (s === 'rest') restLockedUntil = Date.now() + 260; // no instant rebounce
+    paint(s);
+    try { window.api.deckStage(s); } catch {}
+  }
+
+  // ---- zones: coalesced to one send per frame, generation-stamped ----
+  function sendZonesSoon() {
+    if (zonesQueued) return;
+    zonesQueued = true;
+    requestAnimationFrame(() => { zonesQueued = false; sendZones(); });
+  }
+  function stackRange() {
+    // Vertical span of the tab stack in document coords (offset-based).
+    let top = Infinity, bottom = -Infinity, right = -Infinity;
+    for (const t of fan.querySelectorAll('.tab')) {
+      if (!t.offsetParent) continue;
+      const o = t.offsetTop, h = t.offsetHeight;
+      if (o < top) top = o;
+      if (o + h > bottom) bottom = o + h;
+      const r = fan.offsetLeft + t.offsetLeft + t.offsetWidth;
+      if (r > right) right = r;
+    }
+    if (top === Infinity) return null;
+    return { top: fan.offsetTop + top, bottom: fan.offsetTop + bottom, right };
+  }
+  function sendZones() {
+    try {
+      const rects = [];
+      if (stage === 'rest') {
+        // The pill is static at the document origin; the window hugs it and
+        // main centers the window on screen. No centering math here (the old
+        // translateY(-50%) + innerHeight/2 computation fought main's
+        // centering and wandered the pill down the edge).
+        if (!hidePill) {
+          const p = offsetOf(pill);
+          if (p && p.w >= 2 && p.h >= 2) rects.push({ x: p.x, y: p.y, width: p.w, height: p.h });
+        }
+      } else {
+        for (const t of fan.querySelectorAll('.tab')) {
+          const r = offsetOf(t);
+          if (r && r.w >= 2 && r.h >= 2) rects.push({ x: r.x, y: r.y, width: r.w, height: r.h });
+        }
+        const range = stackRange();
+        const previewShown = preview.classList.contains('show');
+        // Preview slot: the card's exact future rect, anchored to LAYOUT
+        // (rail boxes) so it matches the real card even as the window moves.
+        // Reserved for the whole fan session (NOT hover-gated): widening the
+        // native window on hover-enter and shrinking on leave teleports it
+        // ~206px instantly (setBounds has no transition) — that flash is the
+        // v2-killer bug class. Grow piggybacks the wake motion and shrink
+        // rides the fold instead; hovers then cost zero resizes. Swift fold
+        // (260ms) frees underlying buttons fast — no edge deck can show
+        // content at the corner without covering it while open (v1 covered
+        // 352px full height), so speed of dismissal IS the clickability fix.
+        const slot = range
+          ? { x: Math.round(range.right - PREVIEW_W), y: Math.round(range.top), width: PREVIEW_W, height: Math.round(range.bottom - range.top) }
+          : null;
+        if (slot && slot.height >= 2) rects.push(slot);
+        if (previewShown) {
+          const p = offsetOf(preview);
+          const covered = slot && p &&
+            p.x >= slot.x - 2 && p.x + p.w <= slot.x + slot.width + 2 &&
+            p.y >= slot.y - 2 && p.y + p.h <= slot.y + slot.height + 2;
+          if (p && p.w >= 2 && p.h >= 2 && !covered) rects.push({ x: p.x, y: p.y, width: p.w, height: p.h });
+        }
+      }
+      window.api.deckZones({ gen: ++zonesGen, rects, sig: deckSig() });
+    } catch {}
+  }
+
+  // Structural signature: tab ids in order + pitch. Preview visibility is
+  // EXCLUDED on purpose — the flyout must glue (never recenter), so cards
+  // never jump under the cursor. A changed signature (note added / removed /
+  // removed / reordered, pitch change) tells main to center-anchor the fan
+  // so the deck grows symmetrically around its center instead of pushing
+  // downward. Unchanged across autosave re-renders, so hovering survives
+  // typing in an open editor.
+  function deckSig() {
+    try {
+      const ids = [];
+      for (const t of fan.querySelectorAll('.tab[data-nid]')) ids.push(t.dataset.nid);
+      return ids.join(',') + '|' + lastPitch;
+    } catch { return ''; }
+  }
+
+  // ---- data ----
+  async function load() {
+    const seq = ++loadSeq;
+    try {
+      const d = await window.api.deckGet();
+      if (seq !== loadSeq) return;
+      hidePill = !!d.hidePill;
+      keepOpen = !!d.keepOpen;
+      if (Number.isFinite(d.waH) && d.waH > 0) waH = d.waH;
+      if (Array.isArray(d.openIds)) openIds = new Set(d.openIds);
+      if (!booted) { stage = keepOpen ? 'fan' : 'rest'; booted = true; }
+    } catch {}
+    try { allNotes = (await window.api.notesList({ filter: 'active' })) || []; } catch { allNotes = []; }
+    if (seq !== loadSeq) return;
+    render();
+  }
+
+  function render() {
+    // Notes out on screen never also live in the deck (no double copies).
+    notes = allNotes.filter((n) => !openIds.has(n.id));
+    const keepPvId = (preview.classList.contains('show') && pvNote) ? pvNote.id : null;
+
+    // rest pill: thin static dashes (max 14 + overflow).
+    pill.innerHTML = '';
+    notes.slice(0, 14).forEach(n => {
+      const s = document.createElement('i');
+      s.style.background = inkOf(n.color).dash;
+      pill.appendChild(s);
+    });
+    if (notes.length > 14) {
+      const s = document.createElement('i');
+      s.className = 'over';
+      pill.appendChild(s);
+    }
+    if (!notes.length) {
+      const s = document.createElement('i');
+      s.className = 'dim';
+      pill.appendChild(s);
+    }
+    pill.style.display = (stage === 'rest' && !hidePill) ? '' : 'none';
+    deckRoot.classList.toggle('rest', stage === 'rest');
+
+    // Rebuilds while open skip the entrance (autosave churn must not replay
+    // motion or murder hover state); wake entrances still play — paint()
+    // never rebuilds, it only flips .open.
+    fan.innerHTML = '';
+    fan.classList.add('instant');
+    const vis = notes.slice(0, MAX_TABS);
+    const longestTitle = vis.reduce((m, n) => (titleOf(n).length > m.length ? titleOf(n) : m), 'Untitled');
+    const hasMore = notes.length > MAX_TABS;
+    lastPitch = shinglePitchPx(longestTitle, vis.length, hasMore);
+    fan.style.setProperty('--pitch', lastPitch + 'px');
+
+    vis.forEach((n, i) => fan.appendChild(makeTab(n, i)));
+    if (hasMore) fan.appendChild(makeTab({ __more: true, title: `+${notes.length - MAX_TABS} more`, color: '#f4efe1' }, vis.length, 'more'));
+    if (!notes.length) fan.appendChild(makeTab({ __empty: true, title: 'New note', color: '#2a2a2e' }, 0, 'empty'));
+    fan.appendChild(makeTab({ __add: true, title: 'New note', color: '#1d1b18' }, vis.length + (hasMore ? 1 : 0), 'add'));
+    fan.appendChild(makeTab({ __settings: true, title: 'Note settings', color: '#2a2a2e' }, vis.length + (hasMore ? 1 : 0) + 1, 'settings'));
+    fan.appendChild(makeTab({ __lock: true, title: keepOpen ? 'Unlock deck' : 'Lock deck open', color: '#2a2a2e' }, vis.length + (hasMore ? 1 : 0) + 2, 'lock'));
+    fan.appendChild(makeTab({ __clock: true, title: 'Break timer', color: '#2a2a2e' }, vis.length + (hasMore ? 1 : 0) + 3, 'clock'));
+    // No vertical centering offset: the stack flows from the window top and
+    // MAIN centers the whole window. Padding the stack down parked the deck
+    // at the bottom (the union starts at the padding).
+    positionEdgeRule();
+
+    if (stage !== 'rest') fan.classList.add('open'); else fan.classList.remove('open');
+    // Never murder an open preview on re-render: re-link the rebuilt tab.
+    // If the pointer is simply resting on a tab (rebuild ate the element the
+    // hover timer was waiting on), re-show immediately — the pointer is
+    // already there, no 120ms wait.
+    if (keepPvId && stage === 'preview') {
+      const still = notes.find(n => n.id === keepPvId);
+      const newTab = still && Array.from(fan.querySelectorAll('.tab')).find(el => el.dataset.nid === keepPvId);
+      if (still && newTab) { pvTabEl = null; showPreview(still, newTab); }
+      else hidePreview();
+    } else if (hoverNid && stage !== 'rest') {
+      const hn = notes.find(n => n.id === hoverNid);
+      const htab = hn && Array.from(fan.querySelectorAll('.tab')).find(el => el.dataset.nid === hoverNid);
+      if (hn && htab) showPreview(hn, htab);
+      else hidePreview();
+    } else hidePreview();
+    sendZonesSoon();
+    void fan.offsetHeight;
+    requestAnimationFrame(() => fan.classList.remove('instant'));
+  }
+
+  function positionEdgeRule() {
+    try {
+      const tabs = Array.from(fan.querySelectorAll('.tab')).filter(t => t.offsetParent);
+      if (stage === 'rest' || !tabs.length) { edgeRule.style.display = 'none'; return; }
+      const first = tabs[0].offsetTop;
+      const last = tabs[tabs.length - 1];
+      edgeRule.style.display = '';
+      edgeRule.style.top = first + 'px';
+      edgeRule.style.height = (last.offsetTop + last.offsetHeight - first) + 'px';
+    } catch {}
+  }
+
+  function makeTab(n, i, variant) {
+    const t = document.createElement('div');
+    t.className = 'tab' + (variant ? ' ' + variant : '');
+    t.style.setProperty('--i', i);
+    t.style.setProperty('--tab', n.color || '#fce795');
+    const ci = inkOf(n.color);
+    t.style.setProperty('--tab-dash', ci.dash);
+    t.style.setProperty('--tab-ink', ci.ink);
+    // No per-tab zIndex: the shingle relies on DOM order (later paints on top).
+
+    const label = variant ? n.title : titleOf(n);
+    t.setAttribute('aria-label', label);
+    if (variant) t.title = label; // native tooltip on icon tabs only
+
+    if (variant === 'more') {
+      t._variant = 'more';
+      t.innerHTML = `<span class="glyph">${esc(String(n.title).split(' ')[0] || '+')}</span>`;
+      // Overflow goes to the note menu in Home (main app menu), not a
+      // floating window: the deck stays a launcher, Home owns the list.
+      t.addEventListener('click', () => { try { window.api.openWindow('home', 'notes'); } catch {} });
+      t.addEventListener('mouseenter', () => schedulePreviewHide());
+      return t;
+    }
+    if (variant === 'add') {
+      t._variant = 'add';
+      t.innerHTML = `<span class="glyph">+</span>`;
+      t.addEventListener('mouseenter', () => schedulePreviewHide());
+      t.addEventListener('click', addClick);
+      return t;
+    }
+    if (variant === 'settings') {
+      t._variant = 'settings';
+      t.innerHTML = `<span class="glyph">⚙</span>`;
+      t.addEventListener('mouseenter', () => schedulePreviewHide());
+      t.addEventListener('click', () => { try { window.api.openWindow('home', 'notes'); } catch {} });
+      return t;
+    }
+    if (variant === 'empty') {
+      t._variant = 'empty';
+      t.style.setProperty('--tab', '#2a2a2e');
+      t.innerHTML = `<div class="vlabel" style="color:rgba(255,255,255,.72)">NEW NOTE</div>`;
+      t.addEventListener('mouseenter', () => schedulePreviewHide());
+      t.addEventListener('click', addClick);
+      return t;
+    }
+    if (variant === 'lock') {
+      // Lock toggle: pins the deck open with or without hover (the keepOpen
+      // deck setting, persisted). Re-render paints the pressed state.
+      t._variant = 'lock';
+      if (keepOpen) t.classList.add('on');
+      t.innerHTML = `<span class="glyph"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>`;
+      t.addEventListener('mouseenter', () => schedulePreviewHide());
+      t.addEventListener('click', (e) => { e.stopPropagation(); toggleLock(); });
+      return t;
+    }
+    if (variant === 'clock') {
+      // Clock disc opens the floating clock window (like a note) — toggles.
+      t._variant = 'clock';
+      t.innerHTML = `<span class="glyph"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 16l-2.414-2.414A2 2 0 0 1 12 12.172V6"/></svg></span>`;
+      t.addEventListener('mouseenter', () => schedulePreviewHide());
+      t.addEventListener('click', (e) => { e.stopPropagation(); try { window.api.openWindow('clock'); } catch {} });
+      return t;
+    }
+
+    t.dataset.nid = n.id;
+    const parts = [`<div class="vlabel">${esc(label.toUpperCase())}</div>`];
+    if (n.pinned) parts.push('<span class="pin-dot"></span>');
+    t.innerHTML = parts.join('');
+    t.addEventListener('click', () => {
+      hidePreview();
+      try { window.api.openWindow('editor', n.id); } catch {}
+    });
+    return t;
+  }
+
+  function addClick() {
+    (async () => { try { const created = await window.api.notesCreate({}); window.api.openWindow('editor', created.id); } catch {} })();
+  }
+
+  // ---- hover delegation: one listener pair, survives innerHTML rebuilds ----
+  fan.addEventListener('mouseover', (e) => {
+    const tab = e.target && e.target.closest ? e.target.closest('.tab') : null;
+    if (!tab || !tab.dataset.nid) return;
+    const n = notes.find(x => x.id === tab.dataset.nid);
+    if (!n) return;
+    hoverNid = n.id;
+    schedulePreviewShow(n, tab);
+  });
+  fan.addEventListener('mouseout', (e) => {
+    const tab = e.target && e.target.closest ? e.target.closest('.tab') : null;
+    if (!tab) return;
+    if (tab.contains(e.relatedTarget)) return; // still inside the same tab
+    if (tab.dataset.nid) hoverNid = null;
+    schedulePreviewHide();
+  });
+
+  preview.addEventListener('click', () => {
+    if (!pvNote) return;
+    try { window.api.openWindow('editor', pvNote.id); } catch {}
+  });
+
+  function schedulePreviewShow(n, tab) {
+    clearTimeout(pvShowTimer);
+    clearTimeout(pvHideTimer);
+    if (preview.classList.contains('show')) { showPreview(n, tab); return; }
+    pvShowTimer = setTimeout(() => showPreview(n, tab), 120);
+  }
+
+  function showPreview(n, tab) {
+    if (stage === 'rest') return;
+    if (openIds.has(n.id)) return;
+    const swapping = preview.classList.contains('show') && pvNote && pvNote.id !== n.id;
+    pvNote = n;
+    const title = titleOf(n);
+    pvTitle.textContent = title;
+    const meta = [];
+    if (n.total) meta.push(`${n.done}/${n.total} done`);
+    meta.push(ago(n.updatedAt));
+    if (n.pinned) meta.push('pinned');
+    pvMeta.textContent = meta.join(' · ');
+    const stripTask = (s) => s
+      .replace(/^☐\s?/, '').replace(/^☑\s?/, '')
+      .replace(/^-\s\[[ xX]\]\s?/, '').replace(/^-\s?/, '');
+    const bodyLines = String(n.body || '').split('\n').map(s => s.trim()).filter(s => s);
+    const lines = (bodyLines.length && bodyLines[0].toLowerCase() === String(title).toLowerCase())
+      ? bodyLines.slice(1) : bodyLines;
+    const rest = lines.slice(0, 5).map(stripTask);
+    const snippet = rest.join('\n').slice(0, 320);
+    pvText.innerHTML = snippet
+      ? esc(snippet) + (rest.join('\n').length > 320 ? '…' : '')
+      : '<span class="empty">Empty note</span>';
+    pvGutterLabel.textContent = title;
+    const ci = inkOf(n.color);
+    preview.style.setProperty('--pv', n.color || '#fce795');
+    preview.style.setProperty('--pv-ink', ci.ink);
+    preview.style.setProperty('--pv-ink-dim', `color-mix(in srgb, ${ci.ink} 45%, transparent)`);
+    preview.style.setProperty('--pv-ink-soft', `color-mix(in srgb, ${ci.ink} 72%, transparent)`);
+
+    preview.classList.add('show');
+    preview.classList.toggle('swap', !!swapping);
+    if (swapping) void preview.offsetWidth;
+    if (pvTabEl && pvTabEl !== tab) pvTabEl.classList.remove('peeked');
+    pvTabEl = tab;
+    tab.classList.add('peeked');
+    // Card = exactly its tab's height, top-aligned to the tab (PreviewCard),
+    // clamped to the SCREEN work area. All offset-based: stable mid-entrance.
+    const h = Math.max(96, Math.round(tab.offsetHeight || 96));
+    preview.style.height = h + 'px';
+    const top = fan.offsetTop + tab.offsetTop;
+    const maxTop = waH > 0 ? Math.max(8, waH - h - 8) : Math.max(8, top);
+    preview.style.top = Math.round(clampNum(top, 8, maxTop)) + 'px';
+    // Card hangs left of the rail: layout-anchored to the measured stack.
+    const range = stackRange();
+    if (range) preview.style.left = Math.max(0, Math.round(range.right - PREVIEW_W)) + 'px';
+    sendZonesSoon();
+    if (stage !== 'preview') requestStage('preview');
+  }
+
+  function schedulePreviewHide() {
+    clearTimeout(pvShowTimer);
+    clearTimeout(pvHideTimer);
+    pvHideTimer = setTimeout(() => { hidePreview(); }, 110);
+  }
+
+  function hidePreview() {
+    if (!preview.classList.contains('show')) return;
+    preview.classList.remove('show');
+    preview.classList.remove('swap');
+    pvNote = null;
+    if (pvTabEl) pvTabEl.classList.remove('peeked');
+    pvTabEl = null;
+    sendZonesSoon();
+    if (stage === 'preview') requestStage('fan');
+  }
+
+  preview.addEventListener('mouseenter', () => clearTimeout(pvHideTimer));
+  preview.addEventListener('mouseleave', schedulePreviewHide);
+
+  // ---- pointer zoning: content = tab stack | preview | timer sheet ----
+  // Measured against layout boxes (offset-based), never a fixed-width rail,
+  // so dead padding can't pin the deck open after the pointer leaves.
+  function setPointerInside(over) {
+    if (over === lastPointer) return;
+    lastPointer = over;
+    try { window.api.deckPointer(over); } catch {}
+  }
+  function overContent(e) {
+    try {
+      const range = stackRange();
+      if (range) {
+        const x0 = Math.min(range.right - 72, deckRoot.offsetWidth - 72) - 2;
+        const x1 = deckRoot.offsetWidth + 2;
+        if (e.clientX >= x0 && e.clientX <= x1 &&
+            e.clientY >= range.top - 2 && e.clientY <= range.bottom + 2) return true;
+      }
+    } catch {}
+    if (preview.classList.contains('show')) {
+      const p = offsetOf(preview);
+      if (p && e.clientX >= p.x - 2 && e.clientX <= p.x + p.w + 2 &&
+          e.clientY >= p.y - 2 && e.clientY <= p.y + p.h + 2) return true;
+    }
+    return false;
+  }
+  function scheduleSleep(ms = 900) {
+    // Swift fold: the deck gets out of the way fast once the pointer leaves
+    // (900ms off-content, 260ms on leave) — a lingering fan sits over other
+    // apps' top-right buttons. keepOpen (lock) pins it regardless.
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      if (keepOpen || stage === 'rest') return;
+      hidePreview();
+      requestStage('rest');
+    }, ms);
+  }
+
+  // Rest pill is STATIC: at rest the window IS the pill, so pointer motion
+  // here wakes straight into the fan (gated against instant rebounce).
+  window.addEventListener('mousemove', (e) => {
+    if (stage === 'rest') {
+      setPointerInside(false);
+      if (hidePill || Date.now() < restLockedUntil) return;
+      clearTimeout(hideTimer);
+      requestStage('fan');
+      return;
+    }
+    const over = overContent(e);
+    setPointerInside(over);
+    if (over) clearTimeout(hideTimer);
+    else scheduleSleep();
+  });
+
+  const onLeave = () => {
+    setPointerInside(false);
+    if (stage === 'rest') return;
+    scheduleSleep(260);
+  };
+  window.addEventListener('mouseleave', onLeave);
+  document.addEventListener('mouseleave', onLeave);
+
+  // Convergence: a native resize (display change, scale flip) re-measures and
+  // re-glues open flyouts from offsets — never repositions from client rects.
+  let rsT = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(rsT);
+    rsT = setTimeout(() => {
+      if (preview.classList.contains('show') && pvNote && pvTabEl && pvTabEl.isConnected) {
+        try {
+          const h = Math.max(96, Math.round(pvTabEl.offsetHeight || 96));
+          preview.style.height = h + 'px';
+          const top = fan.offsetTop + pvTabEl.offsetTop;
+          const maxTop = waH > 0 ? Math.max(8, waH - h - 8) : Math.max(8, top);
+          preview.style.top = Math.round(clampNum(top, 8, maxTop)) + 'px';
+          const range = stackRange();
+          if (range) preview.style.left = Math.max(0, Math.round(range.right - PREVIEW_W)) + 'px';
+        } catch {}
+      }
+      positionEdgeRule();
+      sendZones();
+    }, 80);
+  });
+  // NOTE: no transitionend resend — zones are transform-free, so the
+  // mid-entrance sample already equals the settled one. The old resend sized
+  // the window to phantom slide pixels and stuck it there.
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && stage !== 'rest') requestStage('rest');
+  });
+
+  /* ---- deck clock disc: live countdown in its tooltip ----
+   * The timer itself lives in the floating clock window (win:open 'clock',
+   * opened like a note). The disc keeps a one-line live readout so the time
+   * is visible without opening anything. */
+  let fstate = null;
+  const dkFmt = (ms) => {
+    const s = Math.max(0, Math.ceil((ms || 0) / 1000)); // ceil, never round
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  function renderClockDisc() {
+    if (!fstate) return;
+    const s = fstate.settings || {};
+    const now = Date.now();
+    const paused = now < (fstate.pausedUntil || 0);
+    let title = 'Next break', ms = fstate.remainingMs;
+    if (fstate.phase === 'break') { title = 'On break'; ms = Math.max(0, (fstate.endsAt || now) - now); }
+    else if (paused) { title = 'Paused'; ms = Math.max(0, (fstate.pausedUntil || now) - now); }
+    else if (fstate.deferred) { title = 'Deferred'; ms = fstate.endsAt ? Math.max(0, fstate.endsAt - now) : (fstate.remainingMs || 0); }
+    else if (fstate.phase === 'prebreak') { title = 'Starting…'; ms = Math.max(0, (fstate.endsAt || now) - now); }
+    else {
+      ms = fstate.endsAt ? Math.max(0, fstate.endsAt - now) : (fstate.remainingMs || 0);
+      if (s.enabled === false) { title = 'Breaks off'; }
+    }
+    try {
+      const disc = fan.querySelector('.tab.clock');
+      if (disc) disc.title = `${dkFmt(ms)} · ${title}`;
+    } catch {}
+  }
+  // Lock toggle: pins the deck open with or without hover. Persisted via the
+  // keepOpen deck setting (same switch as Home → Notes → Keep open).
+  async function toggleLock() {
+    const next = !keepOpen;
+    try {
+      const d = await window.api.deckSave({ keepOpen: next });
+      if (d && typeof d.keepOpen === 'boolean') keepOpen = d.keepOpen;
+      else keepOpen = next;
+    } catch { keepOpen = next; }
+    if (keepOpen && stage === 'rest') requestStage('fan');
+    render(); // repaints the lock disc pressed state
+  }
+  async function refreshClockDisc() {
+    try { fstate = await window.api.focusState(); } catch { fstate = null; }
+    renderClockDisc();
+  }
+  window.api.onFocus(() => refreshClockDisc());
+  window.api.onTick((d) => {
+    if (d && d.phase) {
+      fstate = { ...(fstate || {}), phase: d.phase, remainingMs: d.remainingMs, endsAt: d.endsAt, pausedUntil: d.pausedUntil };
+      renderClockDisc();
+    }
+  });
+  setInterval(() => { if (fstate) renderClockDisc(); }, 1000);
+  refreshClockDisc();
+
+  // Echoes for a stage we already show carry no news (our own requestStage
+  // painted first) — repainting would just re-send identical zones. A
+  // differing stage (main-initiated wake/fold) paints for real. keepOpen
+  // rides along silently.
+  window.api.onDeckStage((d) => {
+    const s = (d && d.stage) || 'rest';
+    const wasKeep = keepOpen;
+    if (d && typeof d.keepOpen === 'boolean') keepOpen = d.keepOpen;
+    if (s !== stage) paint(s);
+    // Keep-open switched on (Home or lock disc) while resting: fan out at
+    // once instead of waiting for the next edge touch.
+    else if (keepOpen && !wasKeep && s === 'rest') requestStage('fan');
+  });
+  // Full settings push from main (deck:save). Applies immediately and
+  // re-renders; a synchronous zones send refines native geometry at once
+  // (main already drove visibility, so this only tightens the hug bounds).
+  try {
+    window.api.onDeckSettings((d) => {
+      if (!d || typeof d !== 'object') return;
+      if (typeof d.hidePill === 'boolean') hidePill = d.hidePill;
+      if (typeof d.keepOpen === 'boolean') keepOpen = d.keepOpen;
+      render();
+      if (!hidePill && stage === 'rest') paint('rest');
+      if (keepOpen && stage === 'rest') requestStage('fan');
+      try { sendZones(); } catch {}
+    });
+  } catch {}
+  window.api.onNotes(() => { load(); });
+  window.api.onNotesOpen((ids) => {
+    openIds = new Set(Array.isArray(ids) ? ids : []);
+    render();
+  });
+
+  // Headless harness hooks (dev only): --deckshot drives these.
+  window.__deckshot = {
+    whiteBg: (on) => { try { deckRoot.style.background = on ? '#fff' : ''; } catch {} },
+  };
+
+  load();
+})();
+</script>
+</body>
+</html>

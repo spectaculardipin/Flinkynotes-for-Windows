@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Flinkynotes</title><link rel="stylesheet" href="styles.css"></head>
+<body><div id="pillRoot"><div class="pillbox">
+  <button id="x" class="pillx" title="Dismiss this warning (the break still starts)">✕</button>
+  <div class="t">Break in <span id="c">0:10</span> — almost time…</div>
+  <div class="row"><button id="now" style="background:#5eead4;color:#07332c;font-weight:600">Start now</button><button id="a">+1m</button><button id="b">+5m</button><button id="c2">+15m</button></div>
+</div></div>
+<script>
+let endsAt=Date.now()+10000;
+function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; }
+window.api.onPillStart(d=>{ endsAt=d.endsAt; });
+window.api.onTick(t=>{ endsAt=t.endsAt; document.getElementById('c').textContent=fmt(endsAt-Date.now()); });
+document.getElementById('now').onclick=()=>window.api.focusAction('start-now');
+document.getElementById('a').onclick=()=>window.api.focusAction('+1');
+document.getElementById('b').onclick=()=>window.api.focusAction('+5');
+document.getElementById('c2').onclick=()=>window.api.focusAction('+15');
+document.getElementById('x').onclick=()=>window.api.pillDismiss();
+setInterval(()=>{ document.getElementById('c').textContent=fmt(endsAt-Date.now()); },250);
+</script></body></html>

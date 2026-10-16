@@ -1,0 +1,62 @@
+{
+  "name": "flinkynotes",
+  "version": "1.0.0",
+  "description": "Flinkynotes — break reminders + edge-docked sticky notes for Windows. Local-only, no telemetry.",
+  "main": "src/main/main.js",
+  "author": "Flinkynotes",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable nsis",
+    "dist-portable": "electron-builder --win portable",
+    "test": "node tests/run.js"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "rcedit": "^5.0.2"
+  },
+  "build": {
+    "appId": "com.flinkynotes.app",
+    "productName": "Flinkynotes",
+    "afterPack": "scripts/afterPack.js",
+    "asarUnpack": [
+      "assets/Logo/favicon.ico"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "icon": "assets/Logo/favicon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Flinkynotes",
+      "runAfterFinish": false,
+      "include": "build/installer.nsh"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ]
+  }
+}

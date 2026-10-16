@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Flinkynotes</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="clockRoot">
+  <div class="cpanel" id="ckPanel">
+    <div class="chead"><span>Break timer</span><button id="ckX" class="nodrag" title="Close (Esc)">✕</button></div>
+    <div class="cstate"><b id="ckTitle">Next break</b><span id="ckClock">--:--</span></div>
+    <div class="csub" id="ckSub">Flinkynotes</div>
+    <div class="cgrid">
+      <button class="cbtn" data-act="snooze1" title="Push the next break back 1 minute">+1m</button>
+      <button class="cbtn" data-act="snooze5" title="Push the next break back 5 minutes">+5m</button>
+    </div>
+    <div class="cgrid">
+      <button class="cbtn wide accent" data-act="start-now">Start break</button>
+      <button class="cbtn wide" data-act="start-long">Long break</button>
+    </div>
+    <div class="cfoot">
+      <button data-open="focus">Break settings</button>
+      <button data-act="toggle" id="ckToggle">Disable</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Floating clock window — opened like a note from the deck's clock disc
+ * (win:open 'clock' toggles it; it lives left of the deck, following it).
+ * Same actions as the break surfaces (TIMER.md §9 clock family: additive
+ * snooze). Countdowns use ceil, never round. Frameless clicks: buttons act
+ * on mousedown when unfocused (WM_MOUSEACTIVATE eats the first click), with
+ * a suppression window so focused clicks never fire twice (editor pattern).
+ * The window hugs the panel via clock:fit (no dead transparent pad). */
+(() => {
+  const panel = document.getElementById('ckPanel');
+  const ckTitle = document.getElementById('ckTitle');
+  const ckClock = document.getElementById('ckClock');
+  const ckSub = document.getElementById('ckSub');
+  const ckToggle = document.getElementById('ckToggle');
+  let fstate = null;
+  let suppressClickUntil = 0;
+
+  const fmt = (ms) => {
+    const s = Math.max(0, Math.ceil((ms || 0) / 1000)); // ceil, never round
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  const wall = () => {
+    try { return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch { return ''; }
+  };
+
+  function render() {
+    if (!fstate) return;
+    const s = fstate.settings || {};
+    const now = Date.now();
+    const paused = now < (fstate.pausedUntil || 0);
+    const phase = fstate.phase;
+    let title = 'Next break', sub = 'Flinkynotes', ms = fstate.remainingMs;
+    if (phase === 'break') {
+      title = 'On break';
+      ms = Math.max(0, (fstate.endsAt || now) - now);
+      sub = 'Enjoy the stretch.';
+    } else if (paused) {
+      title = 'Paused';
+      sub = `Paused until ${new Date(fstate.pausedUntil).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+      ms = Math.max(0, (fstate.pausedUntil || now) - now);
+    } else if (fstate.deferred) {
+      title = 'Deferred';
+      sub = `Paused: ${fstate.deferred}`;
+      ms = fstate.endsAt ? Math.max(0, fstate.endsAt - now) : (fstate.remainingMs || 0);
+    } else if (phase === 'prebreak') {
+      title = 'Starting…';
+      ms = Math.max(0, (fstate.endsAt || now) - now);
+      sub = 'Break about to begin.';
+    } else {
+      ms = fstate.endsAt ? Math.max(0, fstate.endsAt - now) : (fstate.remainingMs || 0);
+      sub = `Now ${wall()} · focus time`;
+      if (s.enabled === false) { title = 'Breaks off'; }
+    }
+    ckTitle.textContent = title;
+    ckClock.textContent = fmt(ms);
+    ckSub.textContent = sub;
+    ckToggle.textContent = s.enabled === false ? 'Enable' : 'Disable';
+  }
+
+  async function refresh() {
+    try { fstate = await window.api.focusState(); } catch { fstate = null; }
+    render();
+  }
+
+  function press(fn) {
+    return {
+      down: (e) => { if (!document.hasFocus()) { e.preventDefault(); suppressClickUntil = Date.now() + 500; fn(); } },
+      click: () => { if (Date.now() < suppressClickUntil) return; fn(); },
+    };
+  }
+  async function act(b) {
+    if (b.dataset.act) {
+      try { await window.api.focusAction(b.dataset.act); } catch {}
+      if (b.dataset.act === 'start-now' || b.dataset.act === 'start-long') hide();
+      await refresh();
+    } else if (b.dataset.open) {
+      try { window.api.openWindow('home', b.dataset.open); } catch {}
+    }
+  }
+  function hide() { try { window.api.hideSelf(); } catch {} }
+
+  panel.querySelectorAll('.cbtn, .cfoot button').forEach(b => {
+    const p = press(() => act(b));
+    b.addEventListener('mousedown', p.down);
+    b.addEventListener('click', (e) => { e.stopPropagation(); p.click(); });
+  });
+  const xp = press(hide);
+  const xBtn = document.getElementById('ckX');
+  xBtn.addEventListener('mousedown', xp.down);
+  xBtn.addEventListener('click', xp.click);
+
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
+
+  window.api.onFocus(() => refresh());
+  window.api.onTick((d) => {
+    if (d && d.phase) {
+      fstate = { ...(fstate || {}), phase: d.phase, remainingMs: d.remainingMs, endsAt: d.endsAt, pausedUntil: d.pausedUntil };
+      render();
+    }
+  });
+  setInterval(() => { if (fstate) render(); }, 1000);
+
+  function fit() {
+    try { window.api.clockFit(panel.offsetHeight + 24); } catch {}
+  }
+  refresh().then(fit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => setTimeout(fit, 60));
+  setTimeout(fit, 500);
+})();
+</script>
+</body>
+</html>

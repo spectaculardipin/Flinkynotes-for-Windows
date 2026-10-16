@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Flinkynotes</title><link rel="stylesheet" href="styles.css"></head>
+<body><div class="win">
+<div class="toolbar"><input type="text" id="q" placeholder="Search title, tags, body…" style="flex:1"><select id="f"><option value="all">All</option><option value="active">Active</option><option value="archived">Archived</option></select>
+<button id="new">+ New</button><button id="exp">Export</button><button id="imp">Import</button></div>
+<div class="list"><div id="items"></div><div class="detail"><input type="text" id="t" placeholder="Title" style="font-size:18px;font-weight:600;border:0;outline:0;background:transparent"><div id="tags" style="margin:4px 0"></div><textarea id="b"></textarea>
+<div style="display:flex;gap:6px;margin-top:8px"><button id="arch">Archive / Restore</button><button id="pinb">Pin</button><button id="delb">Delete</button><span style="flex:1"></span><span id="meta" class="mut"></span></div></div></div>
+</div>
+<script>
+let notes=[], cur=null, saveT=null, loadSeq=0;
+async function load(){ const seq=++loadSeq; const q=document.getElementById('q').value, f=document.getElementById('f').value; const r=await window.api.notesList({query:q, filter:f}); if(seq!==loadSeq) return; notes=r; render(); }
+function render(){ const el=document.getElementById('items'); el.innerHTML='';
+  notes.forEach(n=>{ const d=document.createElement('div'); d.className='noteitem'+(cur===n.id?' active':''); d.style.borderLeftColor=n.color;
+    d.innerHTML=`<b>${esc(n.title)}</b><div class="meta" style="font-size:12px;color:#666">${n.tags.map(t=>`#${esc(t)}`).join(' ')} ${n.total?`• ${n.done}/${n.total} tasks`:''} ${n.archived?'• archived':''} ${n.pinned?'• pinned':''}</div><div style="font-size:13px;color:#333;max-height:40px;overflow:hidden">${esc((n.body||'').slice(0,120))}</div>`;
+    d.onclick=()=>{cur=n.id; show(); render();}; el.appendChild(d); });
+  if(!cur && notes[0]) cur=notes[0].id; show(); }
+function show(){ const n=notes.find(x=>x.id===cur); if(!n){ document.getElementById('t').value=''; document.getElementById('b').value=''; return; }
+  document.getElementById('t').value=n.title; document.getElementById('b').value=n.body||'';
+  document.getElementById('tags').innerHTML=(n.tags||[]).map(t=>`<span class="tag">#${esc(t)}</span>`).join(' ');
+  document.getElementById('meta').textContent=`updated ${new Date(n.updatedAt).toLocaleString()}`; }
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+document.getElementById('q').oninput=load; document.getElementById('f').onchange=load;
+document.getElementById('b').oninput=()=>{ clearTimeout(saveT); saveT=setTimeout(async()=>{ if(cur) await window.api.notesUpdate(cur,{body:document.getElementById('b').value}); load(); },400); };
+document.getElementById('new').onclick=async()=>{ const n=await window.api.notesCreate({}); cur=n.id; load(); window.api.openWindow('editor', n.id); };
+document.getElementById('arch').onclick=async()=>{ const n=notes.find(x=>x.id===cur); if(n){ await window.api.notesUpdate(cur,{archived:!n.archived}); load(); } };
+document.getElementById('pinb').onclick=async()=>{ const n=notes.find(x=>x.id===cur); if(n){ await window.api.notesUpdate(cur,{pinned:!n.pinned}); load(); } };
+document.getElementById('delb').onclick=async()=>{ if(cur&&confirm('Delete permanently?')){ await window.api.notesRemove(cur); cur=null; load(); } };
+document.getElementById('exp').onclick=async()=>{ const kind=prompt('Export kind: json / single / md / txt','json')||'json'; const p=await window.api.notesExport(kind); alert('Exported to:\n'+p); };
+document.getElementById('imp').onclick=async()=>{ const c=await window.api.notesImport(); alert(c+' file(s) imported'); load(); };
+window.api.onAllFilter(f=>{ document.getElementById('f').value=f; load(); });
+window.api.onNotes(load); load();
+</script></body></html>

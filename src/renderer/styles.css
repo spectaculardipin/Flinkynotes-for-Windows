@@ -1,0 +1,583 @@
+/* ============================================================
+   Flinkynotes — design system
+   Cute paper style: pastel note cards, ruled paper, handwriting
+   body font, thin video-style edges and smooth cubic-bezier(.22,1,.36,1)
+   motion. Floating surfaces use no blurred drop shadows.
+   ============================================================ */
+
+:root {
+  --bg: #10222e;
+  --paper: #fbf7ec;
+  --paper-2: #f4efe1;
+  --card: #f7f3e8;
+  --ink: #3b372e;
+  --ink-soft: #6f6857;
+  --muted: #97907e;
+  --line: #e6dfcc;
+  --accent: #e98a6b;
+  --accent-2: #7fb5a8;
+  --danger: #d9534f;
+  --ok: #5aa17a;
+  --shadow-1: 0 2px 6px rgba(35, 30, 20, .10), 0 12px 34px rgba(35, 30, 20, .18);
+  --shadow-2: 0 1px 3px rgba(35, 30, 20, .10), 0 24px 60px rgba(20, 16, 8, .34);
+  --r-lg: 18px;
+  --r-md: 12px;
+  --r-sm: 8px;
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --ease-back: cubic-bezier(.34, 1.25, .64, 1);
+  --hand: "Segoe Script", "Segoe Print", "Ink Free", "Comic Sans MS", cursive;
+  --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* note papers (Paper/Dash/Ink triples) */
+  --paper-lemon: #fce795; --dash-lemon: #e0ad08; --ink-lemon: #3a3008;
+  --paper-peach: #fbcfa6; --dash-peach: #e2762a; --ink-peach: #422413;
+  --paper-rose: #fac4d1; --dash-rose: #dc4570; --ink-rose: #40161f;
+  --paper-lilac: #d9c7fa; --dash-lilac: #7c4dee; --ink-lilac: #2a1b44;
+  --paper-sky: #beddfa; --dash-sky: #2280d6; --ink-sky: #13293a;
+  --paper-mint: #b4e8d0; --dash-mint: #0e9b6e; --ink-mint: #0f2e23;
+  --paper-sand: #e3d3b4; --dash-sand: #a37b3c; --ink-sand: #372c18;
+  --paper-slate: #cbd6e2; --dash-slate: #4e6579; --ink-slate: #1a242e;
+  /* legacy aliases (ghost, generic windows) */
+  --n-butter: #fce795;
+  --n-coral: #fbcfa6;
+  --n-mint: #b4e8d0;
+  --n-sky: #beddfa;
+  --n-lilac: #d9c7fa;
+  --n-pink: #fac4d1;
+  --n-sage: #b4e8d0;
+  --n-peach: #fbcfa6;
+}
+
+* { box-sizing: border-box; font-family: var(--ui); }
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: transparent; color: var(--ink); }
+button { cursor: pointer; border: 0; border-radius: var(--r-sm); padding: 7px 12px; font-size: 13px; background: #fff; color: var(--ink); transition: background .16s var(--ease), transform .16s var(--ease), box-shadow .16s var(--ease); }
+button:hover { background: #f1ece0; }
+button:active { transform: scale(.97); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type=text], input[type=number], select, textarea.simple {
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; font-size: 13.5px;
+  background: #fff; color: var(--ink); transition: border-color .16s var(--ease), box-shadow .16s var(--ease);
+}
+input[type=text]:focus, input[type=number]:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(233,138,107,.16); }
+small.mut { color: var(--muted); font-size: 12px; }
+
+/* Buttons inside a drag region MUST opt out, else clicks are swallowed. */
+.nodrag, button.nodrag, input.nodrag, .nodrag * { -webkit-app-region: no-drag; }
+
+/* thin, quiet scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(60,54,40,.22); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(60,54,40,.4); background-clip: padding-box; border: 3px solid transparent; }
+
+.card { background: var(--card); color: var(--ink); border-radius: var(--r-lg); box-shadow: var(--shadow-1); }
+
+/* ============================================================
+   DECK — edge-docked deck: a 12px dark dash pill at rest,
+   shingled 40px paper tabs fanned with a 3° lean, one fold-out
+   preview card. Per-element subtle shadows only — no window or
+   heavy omni shadow, so nothing lingers after the fold.
+   Tabs never grow on hover; nothing follows the cursor.
+   ============================================================ */
+#deckRoot { width: 100vw; height: 100vh; background: transparent; position: relative; overflow: hidden; }
+
+/* rest: dark STATIC pill of colour dashes (PillControl) — one fixed
+   place on the edge, vertically centred; it never tracks the cursor. */
+#pill {
+  position: absolute; right: 1px; top: 50%; transform: translateY(-50%);
+  width: 12px; padding: 7px 0;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: rgba(28, 28, 30, .88);
+  border: 0; border-radius: 6px;
+  box-shadow: -2px 1px 6px rgba(0,0,0,.22);
+  opacity: 0; transition: opacity .25s var(--ease);
+  pointer-events: none;
+}
+#deckRoot.rest #pill { opacity: 1; }
+#pill i { width: 7px; height: 14px; border-radius: 2.5px; background: var(--n-butter); flex: 0 0 auto; box-shadow: none; }
+#pill i.dim { background: rgba(128,128,128,.4); }
+#pill i.over { background: rgba(128,128,128,.5); }
+
+/* clock panel (shared): the floating clock window content. Was the in-deck
+   timer sheet; now a standalone window opened like a note. */
+#clockRoot { width: 100vw; height: 100vh; background: transparent; display: flex; align-items: flex-start; justify-content: center; padding: 12px; }
+#clockRoot .cpanel { flex: 0 1 auto; width: 224px; }
+.cpanel {
+  background: rgba(18, 21, 26, .85);
+  -webkit-backdrop-filter: blur(20px) saturate(1.25); backdrop-filter: blur(20px) saturate(1.25);
+  border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
+  box-shadow: -5px 4px 16px rgba(0,0,0,.3);
+  color: #f2f5f7; padding: 13px 14px 12px;
+  -webkit-app-region: no-drag;
+}
+.cpanel .chead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(242,245,247,.55); -webkit-app-region: drag; }
+.cpanel .chead button { -webkit-app-region: no-drag; background: transparent; border: 0; color: rgba(242,245,247,.6); font-size: 13px; padding: 2px 6px; border-radius: 7px; cursor: pointer; }
+.cpanel .chead button:hover { background: rgba(255,255,255,.14); color: #fff; }
+.cpanel .cstate { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 3px; }
+.cpanel .cstate b { font-size: 14.5px; }
+.cpanel .cstate span { font-size: 11.5px; color: rgba(242,245,247,.62); font-variant-numeric: tabular-nums; }
+.cpanel .csub { font-size: 11.5px; color: rgba(242,245,247,.6); margin-bottom: 11px; min-height: 15px; }
+.cpanel .cgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; margin-bottom: 8px; }
+.cpanel .cbtn { background: rgba(255,255,255,.11); color: #fff; font-size: 12px; padding: 9px 4px; border-radius: 10px; text-align: center; font-weight: 600; box-shadow: none; border: 0; cursor: pointer; transition: background .16s var(--ease); }
+.cpanel .cbtn:hover { background: rgba(255,255,255,.22); }
+.cpanel .cbtn:active { transform: scale(.95); }
+.cpanel .cbtn.wide { grid-column: span 2; }
+.cpanel .cbtn.accent { background: var(--accent); }
+.cpanel .cbtn.accent:hover { background: #e07a5a; }
+.cpanel .cfoot { display: flex; gap: 7px; }
+.cpanel .cfoot button { flex: 1; background: rgba(255,255,255,.08); color: rgba(255,255,255,.86); font-size: 11.5px; padding: 7px; box-shadow: none; border: 0; border-radius: 8px; cursor: pointer; }
+.cpanel .cfoot button:hover { background: rgba(255,255,255,.18); color: #fff; }
+.tab.clock {
+  width: 28px; height: 28px; flex-basis: 28px; margin-top: 8px; margin-right: 0; border-radius: 50%;
+  background: rgba(51,51,56,.9); align-self: center; border: 0;
+  box-shadow: -2px 1px 5px rgba(0,0,0,.22);
+}
+.tab.clock .glyph svg { display: block; }
+.tab.clock:hover .glyph { transform: scale(1.08); }
+.tab.clock .glyph { transition: transform .15s var(--ease); }
+
+/* fan: shingled tabs — each tab is full height but laps 40px over
+   the one before, like roof tiles; later tabs paint on top by DOM order.
+   Tabs are 30px with a 14px bleed running off the screen edge, so the lean
+   never opens a background wedge. Entrance staggers 45ms with BackEase. */
+.fan {
+  position: absolute; top: 0; right: 0; width: 60px; height: 100%;
+  display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-start;
+  gap: 0; padding: 0; opacity: 0; pointer-events: none;
+  transition: opacity .26s var(--ease);
+}
+.fan.open { opacity: 1; pointer-events: auto; }
+/* data re-renders while open must not replay the entrance: nodes are built
+   straight into their final state (autosave ticks rebuild constantly). */
+.fan.instant .tab { transition: none !important; }
+/* one continuous dashed EdgeRule behind the stack (white@0.35, 3/4 dash) */
+#edgeRule { position: absolute; right: 3.5px; width: 0; border-right: 1px dashed rgba(255,255,255,.35); pointer-events: none; }
+
+.tab {
+  position: relative; width: 44px; margin-right: -14px; height: calc(var(--pitch, 76px) + 40px); flex: 0 0 auto;
+  display: flex; align-items: flex-start; justify-content: center;
+  background: var(--tab, var(--n-butter));
+  background-clip: padding-box;
+  border: 0;
+  border-radius: 11px 0 0 11px;
+  box-shadow: -3px 2px 6px rgba(0,0,0,.22);
+  cursor: pointer; overflow: hidden;
+  margin-top: -40px;
+  transform: translateX(54px) rotate(-3deg); transform-origin: right center; opacity: 0;
+  transition: transform .36s var(--ease-back), opacity .22s ease-out, box-shadow .2s var(--ease), filter .2s var(--ease);
+  transition-delay: calc(var(--i, 0) * 45ms);
+  user-select: none;
+}
+.tab:first-of-type { margin-top: 0; }
+.fan.open .tab { transform: rotate(-3deg); opacity: 1; }
+/* press dips to .97 in 120ms — it never grows on hover, only deepens. */
+.fan.open .tab:active { transform: rotate(-3deg) scale(.97); transition-delay: 0ms; transition-duration: .12s; }
+.tab:hover { filter: brightness(1.05); box-shadow: -3px 2px 9px rgba(0,0,0,.32); z-index: 40 !important; }
+/* peeked tab: out of the way under its own sheet — opacity 0 but still
+   hit-testable, so the hover that asked for the card never breaks. */
+.fan.open .tab.peeked { opacity: 0; transition: opacity .09s ease-out; transition-delay: 0ms; }
+/* Icon tabs (add/more): a centred glyph that can never truncate. */
+.tab .glyph { font-size: 15px; font-weight: 600; font-family: var(--ui); color: rgba(255,255,255,.85); line-height: 1; display: inline-block; transition: transform .15s var(--ease); }
+/* "+" disc below the stack */
+.tab.add { width: 28px; height: 28px; flex-basis: 28px; margin-top: 12px; margin-right: 0; border-radius: 50%; background: rgba(51,51,56,.902); align-self: center; border: 0; box-shadow: -2px 1px 5px rgba(0,0,0,.22); }
+.tab.add .glyph { font-size: 15px; margin-top: -2px; }
+.tab.add:hover .glyph { transform: scale(1.08); }
+.tab.add:active .glyph { transform: scale(.95); }
+.tab.more { width: 30px; height: 34px; margin-top: 7px; margin-right: 0; border-radius: 9px 0 0 9px; background: rgba(42,42,46,.847); }
+.tab.more .glyph { font-size: 10px; color: rgba(255,255,255,.72); }
+/* the label is pinned to the TOP of the tab — the uncovered strip — and reads
+   in full: the strip (--pitch) is measured off the longest title on deck. */
+.tab .vlabel {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-family: var(--hand); font-size: 9.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--tab-ink, #3a3008) 85%, transparent); max-height: var(--pitch, 76px);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 12px 0 3px;
+}
+.tab .pin-dot { position: absolute; top: 7px; right: 23px; width: 5px; height: 5px; border-radius: 50%; background: var(--tab-dash, rgba(58,48,8,.55)); }
+
+/* hover preview — the note ITSELF, sized exactly to its tab (PreviewCard):
+   Segoe UI title + meta line, handwritten 5-line snippet, edge gutter with
+   vertical label. One small directional shadow only. */
+.preview {
+  position: absolute; right: 0; top: 0; width: 264px;
+  display: block;
+  background: linear-gradient(180deg, var(--pv, var(--paper)), color-mix(in srgb, var(--pv, var(--paper)) 95%, #000)); color: var(--ink);
+  background-clip: padding-box;
+  border: 0.5px solid rgba(0,0,0,.07); border-right: 0;
+  border-radius: 12px 0 0 12px;
+  box-shadow: -5px 4px 16px rgba(0,0,0,.3);
+  overflow: hidden;
+  opacity: 0; transform: translateX(24px) scaleX(.62) rotate(-10deg); transform-origin: right center;
+  transition: opacity .09s ease-out, transform .26s var(--ease-back);
+  pointer-events: none; z-index: 60; cursor: pointer;
+  min-height: 96px;
+}
+.preview.show { opacity: 1; transform: rotate(-3deg); pointer-events: auto; }
+.preview .pv-main { padding: 11px 15px 12px; padding-right: 38px; display: flex; flex-direction: column; }
+.preview .pv-title { font-family: var(--ui); font-size: 12.5px; font-weight: 600; color: color-mix(in srgb, var(--pv-ink, #2b2618) 92%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview .pv-meta { font-family: var(--ui); font-size: 10.5px; color: var(--pv-ink-dim, rgba(43,38,24,.45)); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview .pv-prog { display: none; }
+.preview .pv-pin { display: none; }
+.preview .pv-text {
+  margin-top: 7px; font-family: var(--hand); font-size: 13px; line-height: 1.45;
+  color: var(--pv-ink-soft, rgba(43,38,24,.72)); max-height: 160px; overflow: hidden;
+  white-space: pre-line;
+}
+.preview .pv-text .empty { font-style: italic; opacity: .45; }
+/* edge gutter: dashed separator + vertical label, the card's signature detail */
+.preview .pv-gutter {
+  position: absolute; top: 12px; bottom: 12px; right: 8px; width: 20px;
+  border-left: 1px dashed color-mix(in srgb, var(--pv-ink, #2b2618) 22%, transparent);
+  display: flex; align-items: flex-start; justify-content: center; pointer-events: none;
+}
+.preview .pv-gutter span {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-family: var(--ui); font-size: 9px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--pv-ink, #2b2618) 55%, transparent);
+  max-height: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-top: 2px;
+}
+
+/* ============================================================
+   EDITOR / FLOATING NOTE — picture style: pastel sheet, dot +
+   editable title header, plain handwritten body, dot + pill footer.
+   One soft shadow only.
+   ============================================================ */
+#editorRoot { width: 100vw; height: 100vh; background: transparent; display: flex; padding: 10px; }
+.note {
+  --note: var(--paper-lilac);
+  --note-dash: var(--dash-lilac);
+  --note-ink: var(--ink-lilac);
+  position: relative; flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  background: var(--note);
+  border-radius: 20px;
+  border: 1px solid rgba(0,0,0,.10);
+  box-shadow: none;
+  overflow: hidden;
+  animation: note-pop .34s var(--ease) both;
+}
+/* open: a touch of scale + fade, no flying in from afar */
+@keyframes note-pop { from { opacity: 0; transform: scale(.965); } to { opacity: 1; transform: none; } }
+.note header {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; gap: 8px; height: 52px; flex: 0 0 52px; padding: 0 14px 0 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--note-ink) 12%, transparent);
+  -webkit-app-region: drag;
+}
+.note header .dots { display: flex; gap: 6px; }
+.note header .dots i { width: 10px; height: 10px; border-radius: 50%; background: rgba(43,38,24,.22); display: block; }
+.note header .htitle {
+  flex: 1; min-width: 0; font-family: var(--ui); font-size: 15px; font-weight: 700; color: #2b2618;
+  border: 0; outline: 0; background: transparent; padding: 0; margin: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.note header .htitle:focus { background: rgba(255,255,255,.35); border-radius: 6px; }
+.note header .saved { font-family: var(--ui); font-size: 12px; color: rgba(43,38,24,.5); flex: 0 0 auto; }
+.hbtn {
+  -webkit-app-region: no-drag; flex: 0 0 auto;
+  width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border-radius: 8px;
+  color: rgba(43,38,24,.55); transition: background .16s var(--ease), color .16s var(--ease);
+}
+.hbtn:hover { background: rgba(255,255,255,.55); color: rgba(43,38,24,.9); }
+.hbtn.on { color: #2b2618; }
+.hbtn svg { width: 15px; height: 15px; }
+
+.note .paperwrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
+.note textarea {
+  flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%;
+  border: 0; outline: 0; resize: none; background: transparent;
+  padding: 12px 20px 16px; font-family: var(--hand); font-size: 20px; line-height: 1.55;
+  color: var(--note-ink); overflow-y: auto; overflow-x: hidden;
+  background-image: none;
+  caret-color: var(--note-ink);
+}
+.note textarea::selection { background: color-mix(in srgb, var(--note-ink) 22%, transparent); }
+
+/* checklist editor (Task 9): one row per line — real checkbox + inline text.
+   The raw textarea stays as the Text-view escape hatch (same body). */
+#clList {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  padding: 10px 16px 14px 14px;
+  font-family: var(--hand); font-size: 20px; line-height: 1.55; color: var(--note-ink);
+}
+.clrow { display: flex; align-items: flex-start; gap: 10px; padding: 2px 0; min-height: 34px; }
+.clbox {
+  flex: 0 0 auto; width: 24px; height: 24px; margin-top: 5px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.5); border: 1.5px solid color-mix(in srgb, var(--note-ink) 45%, transparent);
+  border-radius: 7px; color: var(--note-ink); cursor: pointer;
+}
+.clbox svg { width: 14px; height: 14px; }
+.clbox.done { background: var(--note-ink); border-color: var(--note-ink); color: var(--note); }
+.clbox .cldot { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--note-ink) 35%, transparent); }
+.clbox:focus-visible { outline: 2px solid var(--note-ink); outline-offset: 2px; }
+.cltext {
+  flex: 1 1 auto; min-width: 0; outline: 0; word-break: break-word; white-space: pre-wrap;
+  padding: 2px 2px 2px 2px; border-radius: 6px; caret-color: var(--note-ink);
+}
+.cltext:focus { background: rgba(255,255,255,.30); }
+.cltext.struck { text-decoration: line-through; opacity: .62; }
+.cltext::selection { background: color-mix(in srgb, var(--note-ink) 22%, transparent); }
+
+.findbar { display: none; align-items: center; gap: 6px; height: 28px; flex: 0 0 28px; padding: 0 14px; background: color-mix(in srgb, var(--note-dash) 12%, transparent); }
+.findbar.show { display: flex; }
+.findbar input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-family: var(--ui); font-size: 12px; color: var(--note-ink); }
+.findbar .fcount { font-family: var(--ui); font-size: 10.5px; color: color-mix(in srgb, var(--note-ink) 45%, transparent); }
+
+.note footer {
+  position: relative; z-index: 2; flex: 0 0 56px;
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--note-ink) 12%, transparent); background: transparent;
+}
+.swatches { display: flex; gap: 8px; align-items: center; -webkit-app-region: no-drag; }
+.sw {
+  width: 22px; height: 22px; border-radius: 7px; padding: 0; border: 0;
+  background-clip: padding-box;
+  box-shadow: none;
+  transition: transform .18s var(--ease);
+  position: relative;
+}
+.sw:hover { transform: scale(1.12); }
+.sw.on { border: 2px solid var(--note-ink); box-shadow: none; outline: 0; transform: scale(1.1); }
+.note footer .spacer { flex: 1 1 auto; }
+.note footer .count { display: none; }
+
+/* no separate palette strip — dots live in the footer */
+.palette { display: none; }
+
+.note.deleted { opacity: .38; filter: grayscale(.6); pointer-events: none; }
+.note.deleted .toast { pointer-events: auto; }
+/* The locked card must stay closable: X/pin keep clicks so a deleted note
+   can always be dismissed by hand (v1 lesson: ghost must be closable). */
+.note.deleted header .hbtn { pointer-events: auto; }
+.note.deleted textarea { color: rgba(45,40,28,.45); }
+.fbtn {
+  -webkit-app-region: no-drag; background: rgba(255,255,255,.5); color: rgba(43,38,24,.85);
+  font-family: var(--ui); font-size: 13px; font-weight: 600; height: 30px; padding: 0 14px; margin-left: 6px; border-radius: 10px;
+}
+.fbtn:hover { background: rgba(255,255,255,.8); }
+.fbtn.danger { color: #c62828; }
+.fbtn.outline { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(43,38,24,.25); }
+.fbtn.confirming { background: var(--danger); color: #fff; animation: shake .3s var(--ease); }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-3px)} 75%{transform:translateX(3px)} }
+.toast {
+  position: absolute; left: 50%; bottom: 54px; transform: translate(-50%, 8px);
+  background: rgba(30,27,20,.94); color: #fff; font-size: 12px; padding: 7px 13px;
+  border-radius: 20px; opacity: 0; pointer-events: none; z-index: 5;
+  transition: opacity .22s var(--ease), transform .22s var(--ease);
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast button { background: rgba(255,255,255,.16); color: #fff; font-size: 11.5px; padding: 3px 9px; margin-left: 8px; border-radius: 12px; }
+.toast button:hover { background: rgba(255,255,255,.3); }
+
+/* ============================================================
+   BREAK SCREEN
+   ============================================================ */
+#breakRoot { width: 100vw; height: 100vh; background: radial-gradient(1200px 700px at 50% 30%, #17495e, #0e2a3a 70%); color: #f2f7f5; display: flex; align-items: center; justify-content: center; text-align: center; }
+.ring { width: 220px; height: 220px; border-radius: 50%; border: 10px solid rgba(255,255,255,.18); border-top-color: #5eead4; display: flex; align-items: center; justify-content: center; font-size: 44px; margin: 0 auto 18px; animation: spin-in .6s var(--ease) both; }
+@keyframes spin-in { from { opacity: 0; transform: scale(.9) rotate(-14deg); } to { opacity: 1; transform: none; } }
+.btnrow { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+.btnrow button { background: rgba(255,255,255,.14); color: #fff; }
+.btnrow button:hover { background: rgba(255,255,255,.26); }
+.btnrow button.primary { background: #5eead4; color: #07332c; font-weight: 600; }
+
+/* ============================================================
+   PRE-BREAK PILL
+   ============================================================ */
+#pillRoot { width: 320px; height: 104px; }
+.pillbox { background: #101f28; color: #eafffb; border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 10px 12px; box-shadow: none; animation: note-pop .3s var(--ease) both; }
+.pillbox .t { font-weight: 600; }
+.pillbox .row { display: flex; gap: 6px; margin-top: 8px; }
+.pillbox button { background: #22333d; color: #dff; font-size: 12px; padding: 6px 8px; }
+
+/* ============================================================
+   HOME / DASHBOARD
+   ============================================================ */
+#homeRoot { width: 100vw; height: 100vh; display: flex; flex-direction: column; background: #f2efe6; color: var(--ink); }
+.titlebar {
+  flex: 0 0 auto; height: 40px; display: flex; align-items: center; gap: 10px;
+  padding: 0 0 0 14px; background: #ece8dc; border-bottom: 1px solid #e0dac9;
+  -webkit-app-region: drag; user-select: none;
+}
+.titlebar .brand { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+.titlebar .brand .logo { width: 18px; height: 18px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), #f3b26a); box-shadow: 0 2px 6px rgba(233,138,107,.5); }
+.titlebar .tb-actions { margin-left: auto; display: flex; height: 100%; -webkit-app-region: no-drag; }
+.titlebar .tb-actions button { width: 46px; height: 100%; border-radius: 0; background: transparent; font-size: 15px; color: var(--ink-soft); display: grid; place-items: center; }
+.titlebar .tb-actions button:hover { background: rgba(0,0,0,.07); }
+.titlebar .tb-actions button.close:hover { background: #e81123; color: #fff; }
+
+.layout { flex: 1 1 auto; display: flex; min-height: 0; }
+.sidebar {
+  flex: 0 0 208px; background: #f7f4ec; border-right: 1px solid #e6e0cf;
+  padding: 14px 10px; display: flex; flex-direction: column; gap: 3px;
+}
+.sidebar .nav-label { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 12px 10px 6px; }
+.navitem {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 11px; border-radius: 10px; background: transparent; font-size: 13.5px; font-weight: 600;
+  color: var(--ink-soft); transition: background .18s var(--ease), color .18s var(--ease), transform .18s var(--ease);
+}
+.navitem:hover { background: rgba(0,0,0,.05); color: var(--ink); }
+.navitem.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(35,30,20,.12), 0 6px 16px rgba(35,30,20,.08); }
+.navitem .ico { width: 18px; text-align: center; font-size: 14px; }
+.sidebar .side-foot { margin-top: auto; padding: 10px; font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+.content { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 22px 26px 34px; }
+.view { display: none; animation: view-in .3s var(--ease) both; }
+.view.on { display: block; }
+@keyframes view-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.view > h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: -.01em; }
+.view > p.sub { margin: 0 0 20px; color: var(--muted); font-size: 13px; }
+
+.grid { display: grid; gap: 14px; }
+.grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.panel { background: #fff; border: 1px solid #ebe5d5; border-radius: var(--r-lg); padding: 17px 18px; box-shadow: 0 1px 2px rgba(35,30,20,.05); }
+.panel > h3 { margin: 0 0 3px; font-size: 14px; }
+.panel > .hint { margin: 0 0 15px; font-size: 12px; color: var(--muted); }
+.panel.span-2 { grid-column: span 2; }
+
+.hero { display: flex; align-items: center; gap: 22px; background: linear-gradient(135deg, #fff, #fff8ec); border: 1px solid #eee6d3; border-radius: var(--r-lg); padding: 20px 22px; box-shadow: 0 2px 4px rgba(35,30,20,.06), 0 14px 34px rgba(35,30,20,.07); }
+.hero .big-ring { position: relative; flex: 0 0 auto; width: 116px; height: 116px; }
+.hero .big-ring svg { transform: rotate(-90deg); }
+.hero .big-ring .rt { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.hero .big-ring .rt b { font-size: 23px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.hero .big-ring .rt span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.hero .hbody { flex: 1; min-width: 0; }
+.hero .hbody h3 { margin: 0 0 5px; font-size: 17px; overflow-wrap: break-word; }
+.hero .hbody p { margin: 0 0 14px; font-size: 13px; color: var(--ink-soft); line-height: 1.55; overflow-wrap: break-word; word-break: break-word; }
+.hero .acts { display: flex; gap: 9px; flex-wrap: wrap; }
+.btn { background: var(--accent); color: #fff; font-weight: 600; padding: 9px 16px; border-radius: 10px; font-size: 13px; box-shadow: 0 3px 10px rgba(233,138,107,.34); }
+.btn:hover { background: #e07a5a; }
+.btn.ghost { background: #fff; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line); }
+.btn.ghost:hover { background: #f7f3ea; }
+.btn.tiny { padding: 7px 12px; font-size: 12.5px; }
+
+.stat { background: #fff; border: 1px solid #ebe5d5; border-radius: var(--r-lg); padding: 15px 16px; box-shadow: 0 1px 2px rgba(35,30,20,.05); transition: transform .2s var(--ease), box-shadow .2s var(--ease); }
+.stat:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(35,30,20,.1); }
+.stat .k { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; }
+.stat .v { font-size: 30px; font-weight: 700; letter-spacing: -.03em; margin-top: 5px; font-variant-numeric: tabular-nums; }
+.stat .d { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+
+.qa { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: #fff; border: 1px solid #ebe5d5; border-radius: 14px; padding: 13px 14px; font-size: 13.5px; font-weight: 600; transition: transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease); }
+.qa:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(35,30,20,.1); border-color: #e3d9c0; }
+.qa .qi { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 11px; display: grid; place-items: center; font-size: 16px; background: #f6f1e4; }
+.qa small { display: block; font-weight: 500; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+
+.form-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px dashed #eee8d8; }
+.form-row:last-child { border-bottom: 0; }
+.form-row .lbl { flex: 1; min-width: 0; }
+.form-row .lbl b { display: block; font-size: 13.5px; font-weight: 600; }
+.form-row .lbl span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+.form-row .ctl { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.form-row .ctl input[type=number] { width: 82px; }
+.form-row .ctl input[type=text] { width: 210px; }
+.form-row .ctl select { min-width: 130px; }
+.unit { font-size: 12px; color: var(--muted); }
+
+.switch { position: relative; width: 42px; height: 24px; flex: 0 0 auto; -webkit-app-region: no-drag; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 2; }
+.switch .track { position: absolute; inset: 0; background: #ddd7c6; border-radius: 20px; transition: background .22s var(--ease); }
+.switch .knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; background: #fff; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.24); transition: transform .26s var(--ease); }
+.switch input:checked ~ .track { background: var(--accent-2); }
+.switch input:checked ~ .knob { transform: translateX(18px); }
+
+.seg { display: inline-flex; background: #f1ece0; border-radius: 11px; padding: 3px; gap: 3px; }
+.seg button { background: transparent; font-size: 12.5px; font-weight: 600; padding: 6px 13px; border-radius: 8px; color: var(--ink-soft); }
+.seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(35,30,20,.16); }
+
+.range { -webkit-appearance: none; appearance: none; width: 150px; height: 5px; border-radius: 5px; background: #eae4d4; outline: none; }
+.range::-webkit-slider-thumb { -webkit-appearance: none; width: 17px; height: 17px; border-radius: 50%; background: var(--accent); cursor: pointer; box-shadow: 0 2px 6px rgba(233,138,107,.5); transition: transform .16s var(--ease); }
+.range::-webkit-slider-thumb:hover { transform: scale(1.15); }
+
+/* notes manager rows */
+.nmgr { background: #fff; border: 1px solid #ebe5d5; border-radius: var(--r-lg); overflow: hidden; }
+.nmgr .nrow { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #f2eddf; transition: background .15s var(--ease); }
+.nmgr .nrow:last-child { border-bottom: 0; }
+.nmgr .nrow:hover { background: #fdfaf2; }
+.nmgr .swatch { width: 14px; height: 34px; border-radius: 5px; flex: 0 0 14px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.nmgr .nmain { flex: 1; min-width: 0; }
+.nmgr .nmain b { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nmgr .nmain span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nmgr .nmeta { font-size: 11px; color: var(--muted); flex: 0 0 auto; text-align: right; }
+.nmgr .nacts { display: flex; gap: 6px; flex: 0 0 auto; }
+.nmgr .nacts button { font-size: 11.5px; padding: 5px 9px; }
+.nmgr .empty { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
+
+.searchbar { display: flex; gap: 9px; align-items: center; margin-bottom: 12px; }
+.searchbar input[type=text] { flex: 1; }
+
+.tag { background: #efe9da; border-radius: 6px; padding: 1px 6px; font-size: 11px; }
+
+/* ============================================================
+   GENERIC WINDOWS (all / settings / capture)
+   ============================================================ */
+.win { padding: 18px; background: #f4f1e8; min-height: 100vh; color: var(--ink); }
+.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.list { display: grid; grid-template-columns: 280px 1fr; gap: 12px; }
+.noteitem { background: #fff; border-radius: 10px; padding: 10px; border-left: 8px solid var(--n-butter); margin-bottom: 8px; cursor: pointer; transition: transform .16s var(--ease), box-shadow .16s var(--ease); }
+.noteitem:hover { transform: translateX(3px); box-shadow: 0 4px 14px rgba(35,30,20,.12); }
+.noteitem.active { outline: 2px solid var(--accent); }
+.detail { background: var(--paper); border-radius: 12px; padding: 12px; min-height: 420px; display: flex; flex-direction: column; box-shadow: inset 0 0 0 1px var(--line); }
+.detail textarea { flex: 1; min-height: 300px; border: 0; outline: 0; resize: vertical; font-size: 14px; background: transparent; font-family: var(--hand); line-height: 27px;
+  background-image: repeating-linear-gradient(to bottom, transparent 0 26px, rgba(45,40,28,.10) 26px 27px); background-attachment: local; }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.tabs button.on { background: #2a3a44; color: #fff; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin-bottom: 10px; }
+#captureRoot { padding: 12px; }
+.capbox { background: var(--paper); border-radius: 14px; padding: 13px; border: 1px solid rgba(69,60,40,.25); box-shadow: none; }
+
+/* ============================================================
+   v2 fixes
+   ============================================================ */
+
+/* Floating-note footer: wrap instead of clipping. At narrow widths the
+   swatches + three buttons used to overflow the 56px bar and cut the Close
+   button (and the delete-undo toast) half off-screen. */
+.note footer {
+  flex: 0 0 auto; min-height: 56px;
+  flex-wrap: wrap; row-gap: 8px;
+}
+.swatches { flex-wrap: wrap; row-gap: 6px; flex: 0 1 auto; min-width: 0; }
+.note footer .spacer { flex: 1 1 auto; min-width: 8px; }
+.fbtn { white-space: nowrap; flex: 0 0 auto; }
+.fbtn.iconbtn { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.fbtn.iconbtn svg { width: 15px; height: 15px; }
+.fbtn.iconbtn.on { background: var(--note-dash, #0e9b6e); color: #fff; }
+.note header .saved { white-space: nowrap; flex: 0 0 auto; }
+
+/* Preview card content swap: tab-to-tab moves re-run a small entrance so
+   they animate instead of swapping text inside a visible card. */
+.preview.swap .pv-main { animation: pv-in .18s var(--ease); }
+@keyframes pv-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Deck settings disc below the + button. */
+.tab.settings {
+  width: 28px; height: 28px; flex-basis: 28px; margin-top: 8px; border-radius: 50%;
+  background: rgba(51,51,56,.9); align-self: center; border: 0;
+  box-shadow: -2px 1px 5px rgba(0,0,0,.22);
+}
+.tab.settings .glyph { font-size: 13px; color: rgba(255,255,255,.85); }
+.tab.settings:hover .glyph { transform: rotate(30deg); }
+
+/* Deck lock disc between settings and clock: toggle, pins the deck open. */
+.tab.lock {
+  width: 28px; height: 28px; flex-basis: 28px; margin-top: 8px; border-radius: 50%;
+  background: rgba(51,51,56,.9); align-self: center; border: 0;
+  box-shadow: -2px 1px 5px rgba(0,0,0,.22);
+}
+.tab.lock .glyph { font-size: 13px; color: rgba(255,255,255,.85); }
+.tab.lock.on { background: var(--accent); }
+.tab.lock.on .glyph { color: #fff; }
+
+/* Pre-break pill: fixed under the clock + instant-dismiss ×. */
+#pillRoot { width: 320px; height: 112px; }
+.pillbox { position: relative; padding-right: 30px; }
+.pillx {
+  position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: rgba(234,255,251,.55); font-size: 12px; border-radius: 7px;
+}
+.pillx:hover { background: rgba(255,255,255,.14); color: #fff; }

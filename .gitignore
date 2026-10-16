@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+tasks/
+.agents/
+.claude/
+AGENTS.md
+skills-lock.json

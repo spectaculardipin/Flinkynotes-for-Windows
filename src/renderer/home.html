@@ -1,0 +1,749 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Flinkynotes</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Flinkynotes paper theme, dark menu accents */
+.healthring { display:flex; align-items:center; gap:14px; }
+.healthring .num { font-size:34px; font-weight:800; letter-spacing:-.03em; }
+.bars { display:flex; align-items:flex-end; gap:8px; height:110px; padding-top:8px; }
+.bars .bar { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0; }
+.bars .col { width:100%; border-radius:8px 8px 4px 4px; background:linear-gradient(180deg,#7fb5a8,#5a9a8d); min-height:6px; transition:height .4s cubic-bezier(.22,1,.36,1); }
+.bars .col.low { background:linear-gradient(180deg,#e98a6b,#d96a4a); }
+.bars .col.mid { background:linear-gradient(180deg,#e8b45a,#d1963c); }
+.bars .dl { font-size:10px; color:var(--muted); font-weight:700; }
+.daypills { display:flex; gap:6px; flex-wrap:wrap; }
+.daypills button { width:38px; height:30px; padding:0; font-weight:700; font-size:12px; background:#f1ece0; border-radius:9px; }
+.daypills button.on { background:#2a3a44; color:#fff; }
+.tbtn { font-size:11.5px; padding:5px 9px; }
+.nudge-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid #f2eddf; border-radius:12px; margin-bottom:8px; background:#fff; }
+.nudge-row .nm { flex:1; min-width:0; }
+.nudge-row .nm b { display:block; font-size:13px; }
+.nudge-row .nm span { display:block; font-size:11.5px; color:var(--muted); }
+.pomo-big { font-size:44px; font-weight:800; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
+.subj-dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:7px; flex:0 0 auto; }
+.cdot { width:18px; height:18px; border-radius:50%; padding:0; border:2px solid transparent; flex:0 0 auto; }
+.cdot.on { border-color:#2b2618; }
+.chip { display:inline-flex; align-items:center; background:#f6f1e4; border-radius:8px; padding:3px 9px; font-size:11.5px; font-weight:600; margin:0 6px 6px 0; }
+.hbar-row { display:flex; align-items:center; gap:9px; margin-bottom:7px; font-size:12px; }
+.hbar-row .nm { flex:0 0 110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.hbar-track { flex:1; background:#f1ece0; border-radius:4px; height:8px; overflow:hidden; }
+.hbar-fill { height:8px; border-radius:4px; background:#7fb5a8; }
+.hbar-row .ct { flex:0 0 30px; text-align:right; font-variant-numeric:tabular-nums; color:var(--ink-soft); }
+</style>
+</head>
+<body>
+<div id="homeRoot">
+  <div class="titlebar">
+    <div class="brand"><img src="../../assets/Logo/logo.png" alt="" style="width:18px;height:18px;border-radius:5px"> Flinkynotes</div>
+    <div class="tb-actions nodrag">
+      <button id="tbMin" class="nodrag" title="Minimise">─</button>
+      <button id="tbMax" class="nodrag" title="Maximise">▢</button>
+      <button id="tbClose" class="close nodrag" title="Hide to tray — breaks keep running">✕</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="nav-label">Overview</div>
+      <button class="navitem on nodrag" data-view="home"><span class="ico">🏠</span> Home</button>
+      <button class="navitem nodrag" data-view="wellness"><span class="ico">📊</span> Wellness</button>
+      <div class="nav-label">Timers</div>
+      <button class="navitem nodrag" data-view="focus"><span class="ico">⏱</span> Break timer</button>
+      <button class="navitem nodrag" data-view="pomo"><span class="ico">🍅</span> Pomodoro</button>
+      <div class="nav-label">Health</div>
+      <button class="navitem nodrag" data-view="reminders"><span class="ico">🔔</span> Reminders</button>
+      <button class="navitem nodrag" data-view="schedule"><span class="ico">📆</span> Schedule</button>
+      <button class="navitem nodrag" data-view="notes"><span class="ico">📝</span> Notes</button>
+      <div class="nav-label">App</div>
+      <button class="navitem nodrag" data-view="system"><span class="ico">⚙</span> System</button>
+      <div class="side-foot">Local-only · no telemetry<br>Notes AES-256-GCM at rest<br><span id="ver">Flinkynotes v1.0.0</span></div>
+    </aside>
+
+    <main class="content">
+      <section class="view on" id="v-home">
+        <h2>Good to see you</h2>
+        <p class="sub">Breaks, notes and wellness — all local, all toggleable.</p>
+        <div class="hero">
+          <div class="big-ring">
+            <svg width="116" height="116" viewBox="0 0 116 116">
+              <circle cx="58" cy="58" r="50" fill="none" stroke="#eee7d7" stroke-width="9"></circle>
+              <circle id="heroRing" cx="58" cy="58" r="50" fill="none" stroke="#e98a6b" stroke-width="9"
+                      stroke-linecap="round" stroke-dasharray="314.16" stroke-dashoffset="314.16"
+                      transform="rotate(-90 58 58)" style="transition:stroke-dashoffset .6s cubic-bezier(.22,1,.36,1),stroke .3s"></circle>
+            </svg>
+            <div class="rt"><b id="heroTime">--:--</b><span id="heroLabel">next break</span></div>
+          </div>
+          <div class="hbody">
+            <h3 id="heroTitle">Break timer is running</h3>
+            <p id="heroSub">Take a short look away every so often — your eyes will thank you.</p>
+            <div class="acts">
+              <button class="btn nodrag" id="hStart">Start break now</button>
+              <button class="btn ghost nodrag" id="hPause">Pause 1 hour</button>
+            </div>
+          </div>
+          <div class="healthring">
+            <svg width="86" height="86" viewBox="0 0 86 86">
+              <circle cx="43" cy="43" r="36" fill="none" stroke="#eee7d7" stroke-width="8"></circle>
+              <circle id="healthRing" cx="43" cy="43" r="36" fill="none" stroke="#7fb5a8" stroke-width="8"
+                      stroke-linecap="round" stroke-dasharray="226.2" stroke-dashoffset="226.2" transform="rotate(-90 43 43)"></circle>
+            </svg>
+            <div><div class="num" id="healthNum">–</div><small class="mut">health score</small><div><small class="mut" id="streakLine"></small></div></div>
+          </div>
+        </div>
+
+        <div class="grid cols-4" style="margin-top:14px">
+          <div class="stat"><div class="k">Notes</div><div class="v" id="sNotes">0</div><div class="d">on the deck</div></div>
+          <div class="stat"><div class="k">Pomodoros</div><div class="v" id="sPomo">0</div><div class="d">completed today</div></div>
+          <div class="stat"><div class="k">Breaks</div><div class="v" id="sBreaks">0</div><div class="d">taken today</div></div>
+          <div class="stat"><div class="k">Tasks left</div><div class="v" id="sTasks">0</div><div class="d">unchecked boxes</div></div>
+        </div>
+
+        <div class="grid cols-2" style="margin-top:14px">
+          <div class="panel">
+            <h3>Quick actions</h3>
+            <p class="hint">Jump straight in.</p>
+            <div class="grid" style="gap:9px">
+              <button class="qa nodrag" id="qNew"><span class="qi">✏️</span><span>New note<small>Fresh floating note</small></span></button>
+              <button class="qa nodrag" id="qPomo"><span class="qi">🍅</span><span>Pomodoro<small id="qPomoSub">25 / 5 / 15</small></span></button>
+              <button class="qa nodrag" id="qAll"><span class="qi">📚</span><span>All notes<small>Search everything</small></span></button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Recent notes</h3>
+            <p class="hint">Click one to open it.</p>
+            <div class="nmgr" id="recent"><div class="empty">No notes yet — hit <b>New note</b>.</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="v-focus">
+        <h2>Break timer</h2>
+        <p class="sub">Mini + long breaks with pre-break warnings and strict mode.</p>
+        <div class="grid cols-2" id="focusGrid"></div>
+        <p class="hint" style="margin-top:14px">The break countdown lives on the note deck now — hover the deck to see it.</p>
+      </section>
+
+      <section class="view" id="v-pomo">
+        <h2>Pomodoro</h2>
+        <p class="sub">Timed work sessions with subjects and productivity reports.</p>
+        <div class="grid cols-2">
+          <div class="panel">
+            <h3>Now</h3>
+            <p class="hint" id="pomoLabel">Ready</p>
+            <div class="pomo-big" id="pomoTime">25:00</div>
+            <p class="hint" id="pomoCycle">Pomodoro 1 of 4</p>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+              <span class="unit">Subject</span>
+              <select id="pomoSubject" class="nodrag" style="flex:1;min-width:0"></select>
+            </div>
+            <div class="acts" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+              <button class="btn nodrag" id="pPrimary">Start</button>
+              <button class="btn ghost nodrag" id="pToBreak">Skip to break</button>
+              <button class="btn ghost nodrag" id="pSkip">Skip break</button>
+              <button class="btn ghost nodrag" id="pStop">Stop Session</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Cycle</h3>
+            <p class="hint">Changes apply immediately.</p>
+            <div id="pomoRows"></div>
+          </div>
+          <div class="panel">
+            <h3>Subjects</h3>
+            <p class="hint">Color-code what each session is for.</p>
+            <div id="subjList"></div>
+            <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
+              <input type="text" id="subjName" class="nodrag" placeholder="e.g. Deep work" style="flex:1;min-width:120px">
+              <div id="subjColors" style="display:flex;gap:6px"></div>
+              <button class="btn tiny nodrag" id="subjAdd">Add</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Today</h3>
+            <p class="hint">Completed sessions.</p>
+            <div class="stat" style="border:0;padding:0;box-shadow:none"><div class="v" id="psToday">0</div><div class="d">pomodoros</div></div>
+            <div id="psTodayBy" style="margin-top:8px"></div>
+          </div>
+          <div class="panel span-2">
+            <h3>Last 7 days</h3>
+            <p class="hint">Completed sessions per day.</p>
+            <div class="bars" id="psWeek"></div>
+          </div>
+          <div class="panel span-2">
+            <h3>Last 30 days</h3>
+            <p class="hint" id="psMonthHint">No sessions yet.</p>
+            <div id="psMonth"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="v-wellness">
+        <h2>Wellness</h2>
+        <p class="sub">Stats dashboard + health score (100 − 5×skipped − 1×postponed − 3 per 40m+ session).</p>
+        <div class="grid cols-2">
+          <div class="panel">
+            <h3>Today</h3>
+            <p class="hint" id="wellDate"></p>
+            <div class="grid cols-2" style="gap:10px">
+              <div class="stat"><div class="k">Score</div><div class="v" id="wScore">–</div><div class="d" id="wStreak"></div></div>
+              <div class="stat"><div class="k">Screen</div><div class="v" id="wScreen">0m</div><div class="d" id="wMedian"></div></div>
+              <div class="stat"><div class="k">Taken</div><div class="v" id="wTaken">0</div><div class="d">breaks</div></div>
+              <div class="stat"><div class="k">Skipped</div><div class="v" id="wSkip">0</div><div class="d" id="wPost"></div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Last 7 days</h3>
+            <p class="hint">Breaks taken per day, colored by score.</p>
+            <div class="bars" id="weekBars"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="v-reminders">
+        <h2>Reminders</h2>
+        <p class="sub">Posture checks, blink nudges and your own custom reminders. Each fires a quiet notification.</p>
+        <div class="grid cols-2">
+          <div class="panel">
+            <h3>Body nudges</h3>
+            <p class="hint">Gentle, local, no sound.</p>
+            <div id="nudgeRows"></div>
+          </div>
+          <div class="panel">
+            <h3>Custom reminders</h3>
+            <p class="hint">e.g. drink water, stretch, take medicine.</p>
+            <div id="customList"></div>
+            <div class="grid" style="gap:8px;margin-top:10px">
+              <input type="text" id="cName" class="nodrag" placeholder="Name — e.g. Drink water">
+              <input type="text" id="cMsg" class="nodrag" placeholder="Message — e.g. Have a glass of water">
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="number" id="cMin" class="nodrag" min="1" value="60" style="width:90px">
+                <span class="unit">min</span>
+                <button class="btn tiny nodrag" id="cAdd">Add reminder</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="v-schedule">
+        <h2>Work schedule</h2>
+        <p class="sub">Reminders only fire inside these hours. Outside them the break countdown holds still. Manual meeting pause lives in the tray menu (<b>Mark as in a meeting</b>).</p>
+        <div class="grid cols-2">
+          <div class="panel">
+            <h3>Active hours</h3>
+            <p class="hint">Weekdays 9–5 by default.</p>
+            <div id="schedRows"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="v-notes">
+        <h2>Notes</h2>
+        <p class="sub">Edge deck — 8 papers, 12px dash pill, shingled tabs.</p>
+        <div class="grid cols-2">
+          <div class="panel span-2">
+            <h3>Edge deck</h3>
+            <p class="hint">How the stack behaves at the screen edge.</p>
+            <div id="deckRows"></div>
+          </div>
+          <div class="panel span-2">
+            <h3>All notes</h3>
+            <p class="hint">Open, pin, colour, archive or delete.</p>
+            <div class="searchbar">
+              <input type="text" id="nq" class="nodrag" placeholder="Search titles, text or #tags…">
+              <div class="seg" id="nFilter">
+                <button class="on nodrag" data-f="active">Active</button>
+                <button data-f="archived" class="nodrag">Archived</button>
+                <button data-f="all" class="nodrag">All</button>
+              </div>
+              <button class="btn tiny nodrag" id="nNew">＋ New</button>
+            </div>
+            <div class="nmgr" id="nList"><div class="empty">Nothing here.</div></div>
+            <div class="toolbar" style="margin-top:12px">
+              <span class="mut" style="flex:1">Move notes out of this app:</span>
+              <button class="btn ghost tiny nodrag" data-export="md">Export .md</button>
+              <button class="btn ghost tiny nodrag" data-export="txt">Export .txt</button>
+              <button class="btn ghost tiny nodrag" data-export="json">Export .json</button>
+              <button class="btn ghost tiny nodrag" id="nImport">Import…</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="v-system">
+        <h2>System</h2>
+        <p class="sub">Startup, storage and privacy.</p>
+        <div class="grid cols-2">
+          <div class="panel"><h3>Startup</h3><p class="hint">Lives in the tray.</p><div id="sysRows"></div></div>
+          <div class="panel"><h3>Privacy</h3><p class="hint">What leaves your machine: nothing.</p>
+            <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.85;color:var(--ink-soft)">
+              <li>No accounts, no servers, no analytics.</li>
+              <li>Note bodies AES-256-GCM in <code>%APPDATA%\Flinkynotes</code>.</li>
+              <li>Stats live in the same folder as plain JSON.</li>
+            </ul>
+          </div>
+          <div class="panel"><h3>Shortcuts</h3><p class="hint">Global.</p><div id="shortcutRows"></div></div>
+          <div class="panel"><h3>About</h3><p class="hint">Flinkynotes v1.0.0</p>
+            <p style="display:flex;align-items:center;gap:10px;font-size:13px;line-height:1.7;color:var(--ink-soft);margin:0"><img src="../../assets/Logo/logo.png" alt="Flinkynotes logo" style="width:40px;height:40px;border-radius:10px;flex:0 0 auto">Break reminders + edge-docked notes. Electron, offline, no telemetry.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  let focus=null, deck=null, sys=null, notes=[], fs=null;
+  let features=null, pomo=null, pomoStatus=null, nudges=null, schedule=null, summary=null;
+  let nFilter='active', nQuery='', armedDel=null, armedTimer=null;
+
+  const esc=(s)=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt=(ms)=>{const s=Math.max(0,Math.ceil((ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
+  const smartSlice=(s,n)=>{const t=String(s||'').replace(/\s+/g,' ').trim();if(t.length<=n)return t;const cut=t.slice(0,n);const sp=cut.lastIndexOf(' ');return (sp>n*0.5?cut.slice(0,sp):cut).trimEnd()+'…';};
+  const ago=(t)=>{const d=Date.now()-new Date(t||Date.now()).getTime();if(d<60000)return'just now';if(d<3600000)return Math.floor(d/60000)+'m ago';if(d<86400000)return Math.floor(d/3600000)+'h ago';return Math.floor(d/86400000)+'d ago';};
+
+  function show(view){$$('.navitem').forEach(b=>b.classList.toggle('on',b.dataset.view===view));$$('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+view));$('.content').scrollTop=0;}
+  $$('.navitem').forEach(b=>b.addEventListener('click',()=>show(b.dataset.view)));
+  window.api.onHomeView((v)=>{if(v)show(v);});
+  $('#tbMin').addEventListener('click',()=>window.api.winMin());
+  $('#tbMax').addEventListener('click',()=>window.api.winMax());
+  $('#tbClose').addEventListener('click',()=>window.api.hideSelf());
+
+  function makeSwitch(on,onChange){
+    const l=document.createElement('label');l.className='switch';
+    l.innerHTML='<input type="checkbox" class="nodrag"><span class="track"></span><span class="knob"></span>';
+    const i=l.querySelector('input');i.checked=!!on;
+    i.addEventListener('change',()=>onChange(i.checked));
+    return l;
+  }
+  function formRow(label,hint,ctl){
+    const row=document.createElement('div');row.className='form-row';
+    const lb=document.createElement('div');lb.className='lbl';lb.innerHTML=`<b>${esc(label)}</b>${hint?`<span>${esc(hint)}</span>`:''}`;
+    const c=document.createElement('div');c.className='ctl';c.appendChild(ctl);
+    row.append(lb,c);return row;
+  }
+  function numInput(val,scale,unit,onSave){
+    const wrap=document.createElement('span');wrap.style.display='inline-flex';wrap.style.gap='8px';wrap.style.alignItems='center';
+    const i=document.createElement('input');i.type='number';i.min='0';i.className='nodrag';i.style.width='82px';
+    i.value=Math.round((val||0)/(scale||1)*100)/100;
+    i.addEventListener('change',()=>{const v=Math.max(0,Number(i.value)||0);i.value=Math.round(v*100)/100;onSave(Math.round(v*(scale||1)));});
+    wrap.appendChild(i);
+    if(unit){const u=document.createElement('span');u.className='unit';u.textContent=unit;wrap.appendChild(u);}
+    return wrap;
+  }
+
+  /* hero */
+  async function refreshState(){try{fs=await window.api.focusState();}catch{fs=null;}renderHero();}
+  function renderHero(){
+    if(!fs)return;
+    const s=fs.settings||{};const now=Date.now();
+    const paused=now<(fs.pausedUntil||0);
+    const CIRC=314.16;
+    let frac=0,color='#e98a6b',label='next break',ms=fs.remainingMs;
+    let title='Break timer is running',sub='Take a short look away every so often — your eyes will thank you.';
+    if(fs.phase==='break'){ms=Math.max(0,(fs.endsAt||now)-now);const dur=fs.kind==='long'?(s.longDurationMs||300000):(s.miniDurationMs||20000);frac=dur?1-ms/dur:0;color='#d9534f';label=fs.kind==='long'?'long break':'break';title='You are on a break';sub=s.manualFinish?'Step away. Finish it when done.':'Step away. It ends by itself.';}
+    else if(fs.phase==='prebreak'){ms=Math.max(0,(fs.endsAt||now)-now);frac=1;color='#e0a63c';label='starting';title='A break is starting';sub='The overlay is about to appear.';}
+    else if(paused){frac=s.miniIntervalMs?1-(fs.remainingMs||0)/s.miniIntervalMs:0;color='#e0a63c';label='paused';title='Paused until '+new Date(fs.pausedUntil).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});sub='Breaks resume automatically.';}
+    else if(fs.deferred){frac=s.miniIntervalMs?1-(fs.remainingMs||0)/s.miniIntervalMs:0;color='#e0a63c';label=fs.deferred;title='Paused ('+fs.deferred+')';sub='Countdown holds while this lasts.';}
+    else if(s.enabled===false){color='#9aa3ad';label='off';frac=0;title='Breaks are off';sub='Turn them back on whenever you like.';}
+    else{frac=s.miniIntervalMs?1-(fs.remainingMs||0)/s.miniIntervalMs:0;}
+    $('#heroTime').textContent=fmt(ms);$('#heroLabel').textContent=label;
+    $('#heroTitle').textContent=title;$('#heroSub').textContent=sub;
+    const ring=$('#heroRing');ring.setAttribute('stroke',color);ring.setAttribute('stroke-dashoffset',String(CIRC*(1-Math.min(1,Math.max(0,frac)))));
+    $('#hStart').textContent=fs.phase==='break'?'Finish break':'Start break now';
+  }
+  $('#hStart').addEventListener('click',async()=>{await window.api.focusAction(fs&&fs.phase==='break'?'finish':'start-now');refreshState();});
+  $('#hPause').addEventListener('click',async()=>{await window.api.focusAction('pause1h');refreshState();});
+
+  /* stats */
+  function renderStats(){
+    const active=notes.filter(n=>!n.archived);
+    $('#sNotes').textContent=active.length;
+    $('#sTasks').textContent=active.reduce((a,n)=>a+Math.max(0,(n.total||0)-(n.done||0)),0);
+    const recent=$('#recent');const rows=active.slice(0,6);
+    if(!rows.length){recent.innerHTML='<div class="empty">No notes yet — hit <b>New note</b>.</div>';}
+    else{recent.innerHTML=rows.map(n=>`<div class="nrow" data-open="${esc(n.id)}"><span class="swatch" style="background:${esc(n.color||'#fce795')}"></span><div class="nmain"><b>${esc(n.title||'Untitled')}</b><span>${esc(smartSlice(n.body,90)||'Empty note')}</span></div><div class="nmeta">${n.total?`${n.done}/${n.total}<br>`:''}${ago(n.updatedAt)}</div></div>`).join('');
+      recent.querySelectorAll('[data-open]').forEach(r=>r.addEventListener('click',()=>window.api.openWindow('editor',r.dataset.open)));}
+    if(summary){
+      $('#sBreaks').textContent=summary.today.breaksTaken||0;
+      $('#sPomo').textContent=(pomoStatus&&pomoStatus.completedToday)||summary.today.pomodoros||0;
+      $('#healthNum').textContent=summary.score;
+      $('#streakLine').textContent=summary.streak?`${summary.streak}-day streak`:'no streak yet';
+      const C=226.2;$('#healthRing').setAttribute('stroke-dashoffset',String(C*(1-summary.score/100)));
+      $('#healthRing').setAttribute('stroke',summary.score>=80?'#7fb5a8':summary.score>=55?'#e0a63c':'#d9534f');
+    }
+  }
+  function renderWellness(){
+    if(!summary)return;
+    const t=summary.today;
+    $('#wellDate').textContent=t.date;
+    $('#wScore').textContent=summary.score;
+    $('#wStreak').textContent=summary.streak?`${summary.streak}d streak`:'no streak';
+    $('#wScreen').textContent=((summary.screenLive!=null?summary.screenLive:t.totalScreenMinutes)||0)+'m';
+    $('#wMedian').textContent='median '+(summary.medianSession||0)+'m · longest '+(t.longestSessionMinutes||0)+'m';
+    $('#wTaken').textContent=t.breaksTaken||0;
+    $('#wSkip').textContent=t.breaksSkipped||0;
+    $('#wPost').textContent='postponed '+(t.breaksPostponed||0);
+    const bars=$('#weekBars');const max=Math.max(1,...summary.week.map(w=>w.taken));
+    bars.innerHTML=summary.week.map(w=>{
+      const h=Math.max(6,Math.round(w.taken/max*84));
+      const cls=w.score>=80?'':(w.score>=55?'mid':'low');
+      const day=new Date(w.date+'T12:00:00').toLocaleDateString([],{weekday:'narrow'});
+      return `<div class="bar"><div class="col ${cls}" style="height:${h}px" title="${esc(w.date)}: ${w.taken} taken, score ${w.score}"></div><div class="dl">${esc(day)}</div></div>`;
+    }).join('');
+  }
+
+  /* quick actions */
+  $('#qNew').addEventListener('click',async()=>{const n=await window.api.notesCreate({});window.api.openWindow('editor',n.id);});
+  $('#qPomo').addEventListener('click',()=>show('pomo'));
+  $('#qAll').addEventListener('click',()=>{show('notes');$('#nq').focus();});
+
+  /* focus form */
+  const FOCUS_SECTIONS=[
+    {title:'Presets',hint:'Start from a recipe, then tune.',items:[
+      {k:'preset',label:'Preset',hint:'20-20-20 is the classic eye rule.',type:'seg',opts:[['classic','Classic'],['20-20-20','20-20-20']]},
+      {k:'enabled',label:'Break timer on',hint:'Master switch.',type:'toggle'}]},
+    {title:'Mini breaks',hint:'Short, frequent eye rests.',items:[
+      {k:'miniEnabled',label:'Mini breaks',type:'toggle'},
+      {k:'miniIntervalMs',label:'Every',type:'num',unit:'min',scale:60000},
+      {k:'miniDurationMs',label:'Lasting',type:'num',unit:'sec',scale:1000},
+      {k:'preMiniMs',label:'Warn me first',type:'num',unit:'sec',scale:1000}]},
+    {title:'Long breaks',hint:'Stand-up-and-move ones.',items:[
+      {k:'longEnabled',label:'Long breaks',type:'toggle'},
+      {k:'longEvery',label:'After every',hint:'minis',type:'num',unit:'minis'},
+      {k:'longDurationMs',label:'Lasting',type:'num',unit:'min',scale:60000},
+      {k:'preLongMs',label:'Warn me first',type:'num',unit:'sec',scale:1000}]},
+    {title:'Behaviour',hint:'How forgiving.',items:[
+      {k:'allowSkip',label:'Allow skipping',type:'toggle'},
+      {k:'allowPostpone',label:'Allow postponing',type:'toggle'},
+      {k:'strictMini',label:'Strict mini',type:'toggle'},
+      {k:'strictLong',label:'Strict long',type:'toggle'},
+      {k:'manualFinish',label:'Manual finish',hint:'Ends only on Finish.',type:'toggle'}]},
+    {title:'Break screen',hint:'What you see.',items:[
+      {k:'overlayTitle',label:'Heading',type:'text'},
+      {k:'overlayDesc',label:'Message',type:'text'},
+      {k:'breakIdeas',label:'Suggest an idea',type:'toggle'},
+      {k:'showOnAllScreens',label:'All displays',type:'toggle'},
+      {k:'sound',label:'Chime',type:'toggle'},
+      {k:'volume',label:'Volume',type:'range'}]},
+  ];
+  async function saveFocus(patch){Object.assign(focus,patch||{});try{focus=await window.api.focusSave(focus);}catch{}refreshState();}
+  function focusRow(item){
+    const row=document.createElement('div');row.className='form-row';
+    const lbl=document.createElement('div');lbl.className='lbl';lbl.innerHTML=`<b>${esc(item.label)}</b>${item.hint?`<span>${esc(item.hint)}</span>`:''}`;
+    const ctl=document.createElement('div');ctl.className='ctl';const k=item.k;
+    if(item.type==='toggle'){ctl.appendChild(makeSwitch(focus[k],(v)=>saveFocus({[k]:v})));}
+    else if(item.type==='num'){ctl.appendChild(numInput(focus[k],item.scale||1,item.unit,(v)=>saveFocus({[k]:Math.round(v)})));}
+    else if(item.type==='text'){const i=document.createElement('input');i.type='text';i.className='nodrag';i.value=focus[k]||'';i.addEventListener('change',()=>saveFocus({[k]:i.value}));ctl.appendChild(i);}
+    else if(item.type==='csv'){const i=document.createElement('input');i.type='text';i.className='nodrag';i.style.width='240px';i.value=(focus[k]||[]).join(', ');i.addEventListener('change',()=>saveFocus({[k]:i.value.split(',').map(s=>s.trim()).filter(Boolean)}));ctl.appendChild(i);}
+    else if(item.type==='range'){const i=document.createElement('input');i.type='range';i.className='range nodrag';i.min='0';i.max='1';i.step='0.05';i.value=focus[k]==null?0.7:focus[k];const out=document.createElement('span');out.className='unit';out.style.minWidth='34px';const paint=()=>{out.textContent=Math.round(Number(i.value)*100)+'%';};paint();i.addEventListener('input',paint);i.addEventListener('change',()=>saveFocus({[k]:Number(i.value)}));ctl.appendChild(i);ctl.appendChild(out);}
+    else if(item.type==='seg'){const seg=document.createElement('div');seg.className='seg';item.opts.forEach(([val,name])=>{const b=document.createElement('button');b.className='nodrag';b.textContent=name;b.classList.toggle('on',focus[k]===val);b.addEventListener('click',async()=>{const patch={[k]:val};if(k==='preset'&&val==='20-20-20')Object.assign(patch,{miniIntervalMs:20*60000,miniDurationMs:20000,preMiniMs:10000,longEnabled:false,miniEnabled:true});if(k==='preset'&&val==='classic')Object.assign(patch,{miniIntervalMs:10*60000,miniDurationMs:20000,preMiniMs:10000,longEnabled:true,longEvery:3,longDurationMs:5*60000,preLongMs:30000,miniEnabled:true});await saveFocus(patch);renderFocus();});seg.appendChild(b);});ctl.appendChild(seg);}
+    row.append(lbl,ctl);return row;
+  }
+  function renderFocus(){
+    const grid=$('#focusGrid');grid.innerHTML='';
+    FOCUS_SECTIONS.forEach(sec=>{const p=document.createElement('div');p.className='panel';p.innerHTML=`<h3>${esc(sec.title)}</h3><p class="hint">${esc(sec.hint)}</p>`;sec.items.forEach(it=>p.appendChild(focusRow(it)));grid.appendChild(p);});
+  }
+
+  /* pomodoro + productivity */
+  const SUBJ_COLORS=['#e0ad08','#e2762a','#dc4570','#7c4dee','#2280d6','#0e9b6e','#a37b3c','#4e6579'];
+  let pomoStats=null, subjColor=SUBJ_COLORS[0];
+  const subjName=(id)=>{
+    if(!id)return 'General';
+    const s=(pomo&&pomo.subjects||[]).find(x=>x.id===id);
+    return s?s.name:'General';
+  };
+  const subjColorOf=(id)=>{
+    if(!id)return '#8b93a0';
+    const s=(pomo&&pomo.subjects||[]).find(x=>x.id===id);
+    return s?s.color:'#8b93a0';
+  };
+  function renderPomo(){
+    if(!pomo)return;
+    if(!Array.isArray(pomo.subjects))pomo.subjects=[];
+    const rows=$('#pomoRows');rows.innerHTML='';
+    const fields=[
+      {k:'workMinutes',label:'Focus',unit:'min',hint:'Work block.'},
+      {k:'shortBreakMinutes',label:'Short break',unit:'min'},
+      {k:'longBreakMinutes',label:'Long break',unit:'min'},
+      {k:'pomodorosPerCycle',label:'Per cycle',unit:'pomodoros'},
+    ];
+    fields.forEach(f=>{
+      const ctl=numInput(pomo[f.k],1,f.unit,async(v)=>{pomo[f.k]=v;try{pomo=await window.api.pomoSave(pomo);}catch{}});
+      rows.appendChild(formRow(f.label,f.hint||'',ctl));
+    });
+    rows.appendChild(formRow('Pomodoro on','Master switch for cycles.',makeSwitch(pomo.enabled,async(v)=>{pomo.enabled=v;try{pomo=await window.api.pomoSave(pomo);}catch{}})));
+    renderPomoStatus();
+    renderSubjectSelect();
+    renderSubjects();
+  }
+  function renderPomoStatus(){
+    if(!pomoStatus)return;
+    const labels={work:'Focus',shortBreak:'Short Break',longBreak:'Long Break',paused:'Paused',idle:'Ready'};
+    const st=pomoStatus.state;
+    $('#pomoLabel').textContent=labels[st]||st;
+    $('#pomoTime').textContent=pomoStatus.remaining||'--:--';
+    $('#pomoCycle').textContent=`Pomodoro ${pomoStatus.currentPomodoro} of ${pomoStatus.totalPomodoros} · ${pomoStatus.completedToday} done today`;
+    $('#qPomoSub').textContent=`${pomo.workMinutes} / ${pomo.shortBreakMinutes} / ${pomo.longBreakMinutes}`;
+    // One primary button follows the session: Start → Pause → Resume.
+    // Skip break exists only mid-break; Stop Session whenever one runs.
+    const primary=$('#pPrimary');
+    primary.textContent=st==='paused'?'Resume':(st==='idle'?'Start':'Pause');
+    primary.classList.toggle('ghost',st!=='idle');
+    const breaks=['shortBreak','longBreak'];
+    const inBreak=breaks.includes(st)||(st==='paused'&&breaks.includes(pomoStatus.pausedFrom));
+    const inWork=st==='work'||(st==='paused'&&pomoStatus.pausedFrom==='work');
+    $('#pToBreak').style.display=inWork?'':'none';
+    $('#pSkip').style.display=inBreak?'':'none';
+    $('#pStop').style.display=st!=='idle'?'':'none';
+  }
+  function renderSubjectSelect(){
+    const sel=$('#pomoSubject');
+    const cur=pomo.currentSubjectId||'';
+    sel.innerHTML=`<option value="">General</option>`+(pomo.subjects||[]).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+    sel.value=(pomo.subjects||[]).some(s=>s.id===cur)?cur:'';
+  }
+  $('#pomoSubject').addEventListener('change',async(e)=>{
+    pomo.currentSubjectId=e.target.value||null;
+    try{pomo=await window.api.pomoSave(pomo);}catch{}
+  });
+  function renderSubjects(){
+    const box=$('#subjList');
+    const items=pomo.subjects||[];
+    box.innerHTML=items.length?items.map(s=>`<div class="nudge-row"><span class="subj-dot" style="background:${esc(s.color)}"></span><div class="nm"><b>${esc(s.name)}</b></div><button class="tbtn nodrag" data-id="${esc(s.id)}">Delete</button></div>`).join(''):'<div class="empty" style="padding:10px;text-align:center;color:var(--muted);font-size:12px">Just General for now.</div>';
+    box.querySelectorAll('button').forEach(b=>b.addEventListener('click',async()=>{
+      pomo.subjects=(pomo.subjects||[]).filter(x=>x.id!==b.dataset.id);
+      if(pomo.currentSubjectId===b.dataset.id)pomo.currentSubjectId=null;
+      try{pomo=await window.api.pomoSave(pomo);}catch{}
+      renderSubjectSelect();renderSubjects();
+    }));
+    const cc=$('#subjColors');cc.innerHTML='';
+    SUBJ_COLORS.forEach(c=>{
+      const b=document.createElement('button');
+      b.className='cdot nodrag'+(c===subjColor?' on':'');b.style.background=c;b.title=c;
+      b.addEventListener('click',()=>{subjColor=c;cc.querySelectorAll('.cdot').forEach(x=>x.classList.toggle('on',x===b));});
+      cc.appendChild(b);
+    });
+  }
+  $('#subjAdd').addEventListener('click',async()=>{
+    const name=$('#subjName').value.trim();
+    if(!name)return;
+    const id='s'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36);
+    pomo.subjects=[...(pomo.subjects||[]),{id,name:name.slice(0,40),color:subjColor}];
+    pomo.currentSubjectId=id;
+    $('#subjName').value='';
+    try{pomo=await window.api.pomoSave(pomo);}catch{}
+    renderSubjectSelect();renderSubjects();
+  });
+  async function loadPomoStats(){
+    try{pomoStats=await window.api.pomoStats();}catch{pomoStats=null;}
+    renderPomoStats();
+  }
+  function renderPomoStats(){
+    if(!pomoStats)return;
+    $('#psToday').textContent=pomoStats.today.total||0;
+    const tb=pomoStats.today.bySubject||{};
+    const keys=Object.keys(tb);
+    $('#psTodayBy').innerHTML=keys.length?keys.map(k=>`<span class="chip"><span class="subj-dot" style="background:${esc(subjColorOf(k))};margin:0"></span>${esc(subjName(k))} · ${tb[k]}</span>`).join(''):'<small class="mut">No sessions yet today.</small>';
+    const bars=$('#psWeek');const max=Math.max(1,...pomoStats.week.map(w=>w.total));
+    bars.innerHTML=pomoStats.week.map(w=>{
+      const h=Math.max(6,Math.round(w.total/max*84));
+      const day=new Date(w.date+'T12:00:00').toLocaleDateString([],{weekday:'narrow'});
+      return `<div class="bar"><div class="col" style="height:${h}px" title="${esc(w.date)}: ${w.total}"></div><div class="dl">${esc(day)}</div></div>`;
+    }).join('');
+    const m=pomoStats.month;
+    $('#psMonthHint').textContent=m.total?`${m.total} sessions in 30 days`+(pomoStats.best.date?` · best ${pomoStats.best.date} (${pomoStats.best.total})`:''):'No sessions yet.';
+    const entries=Object.entries(m.bySubject||{}).sort((a,b)=>b[1]-a[1]);
+    const mmax=Math.max(1,...entries.map(e=>e[1]));
+    $('#psMonth').innerHTML=entries.length?entries.map(([k,n])=>`<div class="hbar-row"><span class="nm"><span class="subj-dot" style="background:${esc(subjColorOf(k))}"></span>${esc(subjName(k))}</span><div class="hbar-track"><div class="hbar-fill" style="width:${Math.round(n/mmax*100)}%;background:${esc(subjColorOf(k))}"></div></div><span class="ct">${n}</span></div>`).join(''):'';
+  }
+  $('#pPrimary').addEventListener('click',async()=>{
+    const st=pomoStatus&&pomoStatus.state;
+    if(st==='paused')window.api.pomoAction('resume');
+    else if(!st||st==='idle'){await window.api.pomoAction('startWork');await loadPomoStats();}
+    else window.api.pomoAction('pause');
+  });
+  $('#pSkip').addEventListener('click',()=>window.api.pomoAction('skip'));
+  $('#pToBreak').addEventListener('click',()=>window.api.pomoAction('skip'));
+  $('#pStop').addEventListener('click',()=>window.api.pomoAction('reset'));
+
+  /* nudges */
+  function renderNudges(){
+    if(!nudges)return;
+    const w=$('#nudgeRows');w.innerHTML='';
+    w.appendChild(formRow('Posture checks','Every N minutes.',(()=>{const s=document.createElement('span');s.style.display='inline-flex';s.style.gap='8px';s.style.alignItems='center';s.appendChild(makeSwitch(nudges.postureEnabled,async(v)=>{nudges.postureEnabled=v;try{nudges=await window.api.nudgesSave(nudges);}catch{}}));s.appendChild(numInput(nudges.postureIntervalMin,1,'min',async(v)=>{nudges.postureIntervalMin=v;try{nudges=await window.api.nudgesSave(nudges);}catch{}}));return s;})()));
+    w.appendChild(formRow('Blink nudges','You blink 66% less at screens.',(()=>{const s=document.createElement('span');s.style.display='inline-flex';s.style.gap='8px';s.style.alignItems='center';s.appendChild(makeSwitch(nudges.blinkEnabled,async(v)=>{nudges.blinkEnabled=v;try{nudges=await window.api.nudgesSave(nudges);}catch{}}));s.appendChild(numInput(nudges.blinkIntervalMin,1,'min',async(v)=>{nudges.blinkIntervalMin=v;try{nudges=await window.api.nudgesSave(nudges);}catch{}}));return s;})()));
+    w.appendChild(formRow('Custom reminders','Your own n-th minute nudges.',makeSwitch(nudges.customEnabled,async(v)=>{nudges.customEnabled=v;try{nudges=await window.api.nudgesSave(nudges);}catch{}})));
+    const list=$('#customList');
+    const items=nudges.custom||[];
+    list.innerHTML=items.length?items.map(r=>`<div class="nudge-row"><div class="nm"><b>${esc(r.name)}</b><span>${esc(r.message)} · every ${r.intervalMinutes}m · ${r.enabled?'on':'off'}</span></div><button class="tbtn nodrag" data-a="toggle" data-id="${esc(r.id)}">${r.enabled?'Off':'On'}</button><button class="tbtn nodrag" data-a="del" data-id="${esc(r.id)}">Delete</button></div>`).join(''):'<div class="empty" style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px">No custom reminders yet.</div>';
+    list.querySelectorAll('button').forEach(b=>b.addEventListener('click',async()=>{
+      const id=b.dataset.id,a=b.dataset.a;
+      const cur=(nudges.custom||[]).find(x=>x.id===id);if(!cur)return;
+      if(a==='toggle')await window.api.nudgeUpdate(id,{enabled:!cur.enabled});
+      else await window.api.nudgeRemove(id);
+      await reloadNudges();
+    }));
+  }
+  async function reloadNudges(){try{nudges=await window.api.nudgesGet();}catch{}renderNudges();}
+  $('#cAdd').addEventListener('click',async()=>{
+    const name=$('#cName').value.trim()||'Reminder';
+    const message=$('#cMsg').value.trim()||name;
+    const mins=Math.max(1,Number($('#cMin').value)||60);
+    await window.api.nudgeAdd({name,message,intervalMinutes:mins});
+    $('#cName').value='';$('#cMsg').value='';
+    await reloadNudges();
+  });
+
+  /* schedule */
+  const DAYS=[['Mon',1],['Tue',2],['Wed',3],['Thu',4],['Fri',5],['Sat',6],['Sun',7]];
+  function timeInput(h,m,onChange){
+    const s=document.createElement('span');s.style.display='inline-flex';s.style.gap='6px';s.style.alignItems='center';
+    const hi=document.createElement('input');hi.type='number';hi.min='0';hi.max='23';hi.value=h;hi.className='nodrag';hi.style.width='64px';
+    const mi=document.createElement('input');mi.type='number';mi.min='0';mi.max='59';mi.value=m;mi.className='nodrag';mi.style.width='64px';
+    const save=()=>onChange(Math.max(0,Math.min(23,Number(hi.value)||0)),Math.max(0,Math.min(59,Number(mi.value)||0)));
+    hi.addEventListener('change',save);mi.addEventListener('change',save);
+    s.append(hi,document.createTextNode(':'),mi);return s;
+  }
+  function renderSchedule(){
+    if(!schedule)return;
+    const w=$('#schedRows');w.innerHTML='';
+    w.appendChild(formRow('Schedule on','Outside hours the timer holds.',makeSwitch(schedule.enabled,async(v)=>{schedule.enabled=v;try{schedule=await window.api.scheduleSave(schedule);}catch{}})));
+    const days=document.createElement('div');days.className='daypills';
+    DAYS.forEach(([name,val])=>{const b=document.createElement('button');b.className='nodrag'+((schedule.activeDays||[]).includes(val)?' on':'');b.textContent=name;b.addEventListener('click',async()=>{let a=new Set(schedule.activeDays||[]);if(a.has(val))a.delete(val);else a.add(val);schedule.activeDays=[...a].sort();try{schedule=await window.api.scheduleSave(schedule);}catch{}renderSchedule();});days.appendChild(b);});
+    w.appendChild(formRow('Days','Which days count.',days));
+    w.appendChild(formRow('Start','Mornings.',timeInput(schedule.startHour,schedule.startMinute,async(h,m)=>{schedule.startHour=h;schedule.startMinute=m;try{schedule=await window.api.scheduleSave(schedule);}catch{}})));
+    w.appendChild(formRow('End','Evenings.',timeInput(schedule.endHour,schedule.endMinute,async(h,m)=>{schedule.endHour=h;schedule.endMinute=m;try{schedule=await window.api.scheduleSave(schedule);}catch{}})));
+  }
+
+  /* clock widget mode */
+  /* deck */
+  const DECK_FIELDS=[
+    {k:'noteSize',label:'Note size',hint:'Floating note dimensions.',type:'seg',opts:[['compact','Compact'],['classic','Classic'],['large','Large']]},
+    {k:'keepOpen',label:'Keep open',hint:'Pin the stack out.',type:'toggle'},
+    {k:'hidePill',label:'Hide edge strip',hint:'Open from Home instead.',type:'toggle'},
+  ];
+  async function saveDeck(patch){Object.assign(deck,patch||{});try{deck=await window.api.deckSave(deck);}catch{}}
+  function renderDeck(){
+    const wrap=$('#deckRows');wrap.innerHTML='';
+    DECK_FIELDS.forEach(item=>{
+      const row=document.createElement('div');row.className='form-row';
+      const lbl=document.createElement('div');lbl.className='lbl';lbl.innerHTML=`<b>${esc(item.label)}</b>${item.hint?`<span>${esc(item.hint)}</span>`:''}`;
+      const ctl=document.createElement('div');ctl.className='ctl';const k=item.k;
+      if(item.type==='toggle')ctl.appendChild(makeSwitch(deck[k],(v)=>saveDeck({[k]:v})));
+      else{const seg=document.createElement('div');seg.className='seg';item.opts.forEach(([val,name])=>{const b=document.createElement('button');b.className='nodrag';b.textContent=name;b.classList.toggle('on',deck[k]===val);b.addEventListener('click',async()=>{await saveDeck({[k]:val});renderDeck();});seg.appendChild(b);});ctl.appendChild(seg);}
+      row.append(lbl,ctl);wrap.appendChild(row);
+    });
+  }
+
+  /* system */
+  function renderSystem(){
+    const wrap=$('#sysRows');wrap.innerHTML='';
+    const row=document.createElement('div');row.className='form-row';
+    row.innerHTML='<div class="lbl"><b>Start with Windows</b><span>Tray after sign-in.</span></div>';
+    const ctl=document.createElement('div');ctl.className='ctl';
+    ctl.appendChild(makeSwitch(sys.autostart,async(v)=>{try{sys=await window.api.sysSave({autostart:v});}catch{}renderSystem();}));
+    row.appendChild(ctl);wrap.appendChild(row);
+    if(sys&&sys.unpackaged){
+      const hint=document.createElement('div');hint.className='form-row';
+      hint.innerHTML='<div class="lbl"><span>Autostart applies to the installed build — dev runs never register a login item.</span></div>';
+      wrap.appendChild(hint);
+    }
+    const brow=document.createElement('div');brow.className='form-row';
+    brow.innerHTML=`<div class="lbl"><b>Build</b><span>Report this with bugs.</span></div>`;
+    const bctl=document.createElement('div');bctl.className='ctl';
+    bctl.innerHTML=`<span class="unit"><code>${esc((sys&&sys.build)||'unknown')}</code></span>`;
+    brow.appendChild(bctl);wrap.appendChild(brow);
+    const sc=$('#shortcutRows');
+    sc.innerHTML=[['Alt + Ctrl + N','New note'],['Alt + Ctrl + A','All notes'],['Alt + Ctrl + L','Archive'],['Alt + Ctrl + T','Break settings'],['Alt + Ctrl + H','Home'],['Esc','Close note / back to deck']].map(([k,d])=>`<div class="form-row"><div class="lbl"><b><code>${esc(k)}</code></b></div><div class="ctl"><span class="unit">${esc(d)}</span></div></div>`).join('');
+  }
+
+  /* notes manager */
+  function setNFilter(f){nFilter=f;$$('#nFilter button').forEach(b=>b.classList.toggle('on',b.dataset.f===f));renderNotes();}
+  $$('#nFilter button').forEach(b=>b.addEventListener('click',()=>setNFilter(b.dataset.f)));
+  $('#nq').addEventListener('input',(e)=>{nQuery=e.target.value;renderNotes();});
+  function visibleNotes(){
+    let list=notes.slice();
+    if(nFilter==='active')list=list.filter(n=>!n.archived);
+    else if(nFilter==='archived')list=list.filter(n=>n.archived);
+    const q=nQuery.trim().toLowerCase();
+    if(q)list=list.filter(n=>(n.title||'').toLowerCase().includes(q)||String(n.body||'').toLowerCase().includes(q)||(n.tags||[]).join(' ').includes(q));
+    return list;
+  }
+  function renderNotes(){
+    const box=$('#nList');const list=visibleNotes();
+    if(!list.length){box.innerHTML=`<div class="empty">${nQuery?'No match.':'Nothing here yet.'}</div>`;return;}
+    box.innerHTML=list.map(n=>{const armed=armedDel===n.id;return `<div class="nrow" data-id="${esc(n.id)}"><span class="swatch" style="background:${esc(n.color||'#fce795')}"></span><div class="nmain"><b>${n.pinned?'📌 ':''}${esc(n.title||'Untitled')}</b><span>${esc(smartSlice(n.body,110)||'Empty note')}</span></div><div class="nmeta">${n.total?`${n.done}/${n.total} tasks<br>`:''}${ago(n.updatedAt)}${n.archived?'<br>archived':''}</div><div class="nacts"><button class="nodrag" data-a="open">Open</button><button class="nodrag" data-a="pin">${n.pinned?'Unpin':'Pin'}</button><button class="nodrag" data-a="arch">${n.archived?'Restore':'Archive'}</button><button class="nodrag" data-a="del">${armed?'Sure?':'Delete'}</button></div></div>`;}).join('');
+    box.querySelectorAll('.nrow').forEach(r=>{
+      const id=r.dataset.id;
+      r.querySelectorAll('button').forEach(b=>b.addEventListener('click',async(e)=>{
+        e.stopPropagation();const a=b.dataset.a;
+        if(a==='open'){window.api.openWindow('editor',id);return;}
+        const n=notes.find(x=>x.id===id);if(!n)return;
+        if(a==='pin')await window.api.notesUpdate(id,{pinned:!n.pinned});
+        else if(a==='arch')await window.api.notesUpdate(id,{archived:!n.archived});
+        else if(a==='del'){
+          if(armedDel!==id){clearTimeout(armedTimer);armedDel=id;renderNotes();armedTimer=setTimeout(()=>{armedDel=null;renderNotes();},3000);return;}
+          clearTimeout(armedTimer);armedDel=null;await window.api.notesRemove(id);
+        }
+      }));
+    });
+  }
+  $('#nNew').addEventListener('click',async()=>{const n=await window.api.notesCreate({});window.api.openWindow('editor',n.id);});
+  $$('.toolbar [data-export]').forEach(b=>b.addEventListener('click',()=>window.api.notesExport(b.dataset.export)));
+  $('#nImport').addEventListener('click',async()=>{await window.api.notesImport();await loadAll();});
+
+  /* boot */
+  let loadSeq=0;
+  async function loadAll(){
+    const seq=++loadSeq;
+    try{focus=await window.api.focusSettings();}catch{}
+    if(seq!==loadSeq)return;
+    try{deck=await window.api.deckGet();}catch{}
+    if(seq!==loadSeq)return;
+    try{sys=await window.api.sysGet();}catch{}
+    if(seq!==loadSeq)return;
+    try{notes=await window.api.notesList({});}catch{notes=[];}
+    if(seq!==loadSeq)return;
+    try{features=await window.api.featuresGet();}catch{}
+    try{const p=await window.api.pomoGet();pomo=p.settings;pomoStatus=p.status;}catch{}
+    try{nudges=await window.api.nudgesGet();}catch{}
+    try{schedule=await window.api.scheduleGet();}catch{}
+    try{summary=await window.api.wellnessSummary();}catch{}
+    if(seq!==loadSeq)return;
+    renderStats();renderNotes();renderWellness();
+  }
+  async function boot(first=true){
+    await loadAll();
+    if(focus)renderFocus();
+    if(deck)renderDeck();
+    if(sys)renderSystem();
+    if(pomo)renderPomo();
+    if(nudges)renderNudges();
+    if(schedule)renderSchedule();
+    await loadPomoStats();
+    await refreshState();
+  }
+  window.api.onNotes(()=>loadAll());
+  window.api.onFocus(()=>refreshState());
+  try { window.api.onWellness(async()=>{ try{summary=await window.api.wellnessSummary();}catch{} renderStats();renderWellness(); }); } catch {}
+  window.api.onTick((d)=>{if(!fs)return;fs={...fs,phase:d.phase,remainingMs:d.remainingMs,endsAt:d.endsAt,pausedUntil:d.pausedUntil};renderHero();});
+  window.api.onPomo((st)=>{
+    // Status arrives every second while running; the stats report hits the
+    // disk, so only reload it when a session actually completed.
+    const doneChanged=!pomoStatus||st.completedToday!==pomoStatus.completedToday;
+    pomoStatus=st;renderPomoStatus();renderStats();
+    if(doneChanged)loadPomoStats();
+  });
+  window.api.onNudge(()=>loadAll());
+  boot();
+})();
+</script>
+</body>
+</html>

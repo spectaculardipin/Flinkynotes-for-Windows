@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Flinkynotes</title><link rel="stylesheet" href="styles.css"></head>
+<body><div id="breakRoot"><div style="max-width:640px;padding:24px">
+  <div style="opacity:.8;letter-spacing:2px;font-size:12px" id="k">MINI BREAK</div>
+  <h1 id="title" style="font-size:42px;margin:8px 0">Time to look away</h1>
+  <p id="desc" style="opacity:.85;font-size:17px;white-space:pre-line"></p>
+  <div class="ring" id="clock">0:20</div>
+  <div class="btnrow" id="row">
+    <button class="primary" id="finish">Finish</button>
+    <button id="post">Postpone</button>
+    <span id="srow"><button id="s1">+1m</button><button id="s5">+5m</button><button id="s15">+15m</button></span>
+    <button id="skip" style="display:none">Skip (Ctrl+X)</button>
+  </div>
+  <small class="mut" style="color:#9db8c2">+1m / +5m / +15m bring this screen back after that long. Strict mode hides postpone/skip.</small>
+</div></div>
+<script>
+let endsAt=Date.now()+20000, kind='mini', strict=false, manual=false, audio=null, allowSkip=true, allowPost=true;
+function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; }
+function tick(){ document.getElementById('clock').textContent=fmt(endsAt-Date.now());
+  // Skip is always offered when not strict (engine no longer time-gates explicit
+  // Skip — hiding it for the first half while home/clock/Ctrl+X stayed clickable
+  // is what made Skip read as dead).
+  const showSkip=!strict && allowSkip; document.getElementById('skip').style.display=showSkip?'':'none';
+  if(!manual && Date.now()>=endsAt) window.api.focusAction('finish');
+}
+window.api.onBreakStart(d=>{ kind=d.kind; endsAt=d.endsAt; strict=!!d.strict; manual=!!d.manual;
+  allowSkip=d.allowSkip!==false; allowPost=d.allowPostpone!==false;
+  document.getElementById('k').textContent=(kind||'mini').toUpperCase()+' BREAK';
+  document.getElementById('title').textContent=d.msg.title; document.getElementById('desc').textContent=d.msg.desc;
+  document.getElementById('post').style.display=(strict||!allowPost)?'none':'';
+  document.getElementById('srow').style.display=(strict||!allowPost)?'none':'';
+  tick(); });
+window.api.onTick(t=>{ endsAt=t.endsAt; tick(); });
+window.api.onBreakChime(({volume})=>{ try{ const C=new (window.AudioContext||window.webkitAudioContext)(); const o=C.createOscillator(), g=C.createGain(); o.frequency.value=660; g.gain.value=(volume??0.7)*0.2; o.connect(g).connect(C.destination); o.start(); o.stop(C.currentTime+0.9); }catch{} });
+document.getElementById('finish').onclick=()=>window.api.focusAction('finish');
+document.getElementById('post').onclick=()=>window.api.focusAction('postpone');
+document.getElementById('s1').onclick=()=>window.api.focusAction('+1');
+document.getElementById('s5').onclick=()=>window.api.focusAction('+5');
+document.getElementById('s15').onclick=()=>window.api.focusAction('+15');
+document.getElementById('skip').onclick=()=>window.api.focusAction('skip');
+document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='x'){ window.api.focusAction('skip'); } if(e.key==='Escape'&&!strict){ window.api.focusAction('skip'); } });
+setInterval(tick,250); tick();
+</script></body></html>

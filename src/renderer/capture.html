@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Flinkynotes</title><link rel="stylesheet" href="styles.css"></head>
+<body><div id="captureRoot"><div class="capbox">
+<input type="text" id="t" placeholder="Quick capture… Enter saves, Shift+Enter newline, Esc cancels" style="width:100%">
+<div id="dest" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"></div>
+</div></div>
+<script>
+let notes=[];
+async function init(){ notes=await window.api.notesList({filter:'active'}); const d=document.getElementById('dest');
+  d.innerHTML='';
+  const mk=(label,id)=>{ const b=document.createElement('button'); b.textContent=label; b.style.fontSize='12px'; b.onclick=()=>save(id); d.appendChild(b); };
+  mk('⌘1 New',null); notes.slice(0,5).forEach((n,i)=>mk(`⌘${i+2} ${n.title.slice(0,14)}`,n.id)); }
+async function save(destId){ const v=document.getElementById('t').value; if(!v.trim()){ window.api.closeSelf(); return; } await window.api.quickCapture(v,destId); window.api.closeSelf(); }
+document.getElementById('t').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); save(null); } if(e.key==='Escape') window.api.closeSelf(); });
+document.getElementById('t').focus(); init();
+</script></body></html>

@@ -1,0 +1,601 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Flinkynotes</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="editorRoot">
+  <div class="note" id="card">
+    <header>
+      <button class="hbtn nodrag" id="tuck" title="Close — back to the deck (Esc)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+      <span class="dots"><i></i><i></i></span>
+      <input class="htitle nodrag" id="title" value="New note" spellcheck="false" autocomplete="off" maxlength="80">
+      <span class="saved" id="saved"></span>
+      <button class="hbtn nodrag" id="pin" title="Pin so it stays open (Ctrl+P)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5 13.5 6.5 9.8 7.3 8.6 11.6 7.4 10.4 4.5 13.5 2.5 11.5 5.6 8.6 4.4 7.4 8.7 6.2z"/></svg>
+      </button>
+    </header>
+
+    <div class="findbar" id="find">
+      <input type="text" id="q" class="nodrag" placeholder="Find in note…  Enter for next">
+    </div>
+
+    <div class="paperwrap">
+      <div id="clList" aria-label="Note checklist"></div>
+      <textarea id="body" spellcheck="false" placeholder="" style="display:none"></textarea>
+    </div>
+
+    <footer class="nodrag">
+      <button class="fbtn iconbtn" id="todo" title="Text view — edit raw text (Ctrl+Shift+T)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7"/></svg>
+      </button>
+      <div class="swatches" id="swatches"></div>
+      <span class="spacer"></span>
+      <button class="fbtn danger" id="del" title="Delete this note">Delete</button>
+      <button class="fbtn outline" id="arch" title="Archive — out of the deck, kept forever">Archive</button>
+    </footer>
+
+  </div>
+</div>
+
+<script src="../main/checklist.js"></script>
+<script>
+/* Checklist editor (Task 9): one row per line, each with a real checkbox +
+ * inline-editable text. Storage stays plain text (see checklist.js), so
+ * encryption, export/import, deck preview, Home stats and All notes are
+ * untouched. Save keeps the single 300ms debounce -> one notesUpdate.
+ * Escape hatch: the footer button swaps back to the raw textarea for the
+ * same note (both serialize to the same body). todoMode is legacy.
+ */
+(() => {
+  const C = (typeof window !== 'undefined' && window.Checklist) ? window.Checklist : null;
+  const card = document.getElementById('card');
+  const ta = document.getElementById('body');
+  const clList = document.getElementById('clList');
+  const titleInput = document.getElementById('title');
+  const savedEl = document.getElementById('saved');
+  const swatchesEl = document.getElementById('swatches');
+  const findEl = document.getElementById('find');
+  const qEl = document.getElementById('q');
+
+  const PALETTE = [
+    { paper: '#fce795', dash: '#e0ad08', ink: '#3a3008', name: 'Lemon' },
+    { paper: '#fbcfa6', dash: '#e2762a', ink: '#422413', name: 'Peach' },
+    { paper: '#fac4d1', dash: '#dc4570', ink: '#40161f', name: 'Rose' },
+    { paper: '#d9c7fa', dash: '#7c4dee', ink: '#2a1b44', name: 'Lilac' },
+    { paper: '#beddfa', dash: '#2280d6', ink: '#13293a', name: 'Sky' },
+    { paper: '#b4e8d0', dash: '#0e9b6e', ink: '#0f2e23', name: 'Mint' },
+    { paper: '#e3d3b4', dash: '#a37b3c', ink: '#372c18', name: 'Sand' },
+    { paper: '#cbd6e2', dash: '#4e6579', ink: '#1a242e', name: 'Slate' },
+  ];
+  const FALLBACK = PALETTE[0];
+
+  let id = null;
+  let note = null;
+  let openSeq = 0;
+  let saveT = null;
+  let dirty = false;
+  let delArm = null;
+  let findOpen = false;
+  let suppressClickUntil = 0;
+  // Checklist model + view. rows mirrors the body text 1:1.
+  let rows = [];
+  let view = 'check'; // 'check' | 'text'
+  let lastRow = 0;
+
+  const infoOf = (paper) => PALETTE.find(c => c.paper === String(paper || '').toLowerCase()) || FALLBACK;
+  const esc = (s) => String(s == null ? '' : s);
+
+  function bodyText() {
+    if (view === 'text') return ta.value;
+    try { return C.serializeRows(rows); } catch { return ta.value; }
+  }
+  function syncModelFromText(t) {
+    try { rows = C.parseRows(t); } catch { rows = [{ task: false, content: String(t || '') }]; }
+  }
+
+  /* ---------------- swatches ---------------- */
+  function buildSwatches() {
+    swatchesEl.innerHTML = '';
+    PALETTE.forEach(c => {
+      const b = document.createElement('button');
+      b.className = 'sw';
+      b.type = 'button';
+      b.title = c.name;
+      b.style.background = c.dash;
+      b.dataset.paper = c.paper;
+      b.addEventListener('click', () => setColor(c.paper));
+      swatchesEl.appendChild(b);
+    });
+  }
+  function applyColor() {
+    const c = infoOf(note && note.color);
+    card.style.setProperty('--note', c.paper);
+    card.style.setProperty('--note-dash', c.dash);
+    card.style.setProperty('--note-ink', c.ink);
+    const cur = (note && note.color || '').toLowerCase();
+    swatchesEl.querySelectorAll('.sw[data-paper]').forEach(b => b.classList.toggle('on', b.dataset.paper.toLowerCase() === cur));
+  }
+  async function setColor(paper) {
+    if (!id) return;
+    await flushAll();
+    try { note = await window.api.notesUpdate(id, { color: paper }) || note; } catch {}
+    applyColor();
+    flashSaved();
+  }
+
+  /* ---------------- checklist DOM ---------------- */
+  function setCaret(el, pos) {
+    try {
+      el.focus({ preventScroll: true });
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(pos === 'end' ? false : true);
+      if (pos === 'end') range.collapse(false);
+      else if (typeof pos === 'number') {
+        // walk text nodes to offset
+        let remaining = pos;
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode();
+        let done = false;
+        while (node) {
+          if (remaining <= node.length) { range.setStart(node, remaining); range.collapse(true); done = true; break; }
+          remaining -= node.length;
+          node = walker.nextNode();
+        }
+        if (!done) range.collapse(false);
+      }
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch { try { el.focus(); } catch {} }
+  }
+  function caretAtStart(el) {
+    try {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return false;
+      const r = sel.getRangeAt(0);
+      if (!el.contains(r.startContainer)) return false;
+      const pre = r.cloneRange();
+      pre.selectNodeContents(el);
+      pre.setEnd(r.startContainer, r.startOffset);
+      return pre.toString().length === 0 && r.collapsed;
+    } catch { return false; }
+  }
+
+  function renderChecklist(focusIdx, caretPos) {
+    clList.innerHTML = '';
+    rows.forEach((r, i) => {
+      const row = document.createElement('div');
+      row.className = 'clrow';
+      row.dataset.idx = i;
+      const box = document.createElement('button');
+      box.type = 'button';
+      box.className = 'clbox' + (r.task && r.done ? ' done' : '');
+      box.setAttribute('role', 'checkbox');
+      box.setAttribute('aria-checked', r.task && r.done ? 'true' : 'false');
+      box.setAttribute('aria-label', r.task ? (r.done ? 'Uncheck row' : 'Check row') : 'Make row a task');
+      box.tabIndex = 0;
+      box.innerHTML = r.task ? (r.done ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8.5 6.5 12 13 4.5"/></svg>' : '') : '<span class="cldot"></span>';
+      box.addEventListener('click', (e) => { e.stopPropagation(); toggleRow(i); });
+      box.addEventListener('keydown', (e) => {
+        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleRow(i); }
+      });
+      const tx = document.createElement('div');
+      tx.className = 'cltext';
+      tx.contentEditable = 'plaintext-only';
+      tx.spellcheck = false;
+      tx.dataset.idx = i;
+      tx.textContent = r.task ? r.content : (r.raw != null ? r.raw : (r.content || ''));
+      if (r.indent) tx.style.paddingLeft = `calc(2px + ${Math.min(String(r.indent).length, 8) * 8}px)`;
+      if (r.task && r.done) tx.classList.add('struck');
+      tx.addEventListener('input', () => {
+        lastRow = i;
+        const v = tx.textContent;
+        if (rows[i].task) rows[i].content = v;
+        else { rows[i].content = v; rows[i].raw = v; }
+        scheduleSave();
+      });
+      tx.addEventListener('keydown', (e) => onRowKey(e, i, tx));
+      tx.addEventListener('paste', (e) => onRowPaste(e, i, tx));
+      tx.addEventListener('focus', () => { lastRow = i; });
+      tx.addEventListener('blur', flushAll);
+      row.appendChild(box);
+      row.appendChild(tx);
+      clList.appendChild(row);
+    });
+    if (typeof focusIdx === 'number' && clList.children[focusIdx]) {
+      const tx = clList.children[focusIdx].querySelector('.cltext');
+      if (tx) setCaret(tx, caretPos === undefined ? 'end' : caretPos);
+    }
+  }
+
+  function toggleRow(i) {
+    if (i < 0 || i >= rows.length) return;
+    lastRow = i;
+    try {
+      const t = C.serializeRows(rows);
+      const next = C.toggleLine(t, i);
+      syncModelFromText(next);
+    } catch {
+      const r = rows[i];
+      if (!r.task) { r.task = true; r.done = false; r.style = 'box'; r.content = r.raw || ''; }
+      else r.done = !r.done;
+    }
+    renderChecklist(i, 'end');
+    try {
+      const tx = clList.children[i].querySelector('.cltext');
+      if (tx) tx.focus({ preventScroll: true });
+    } catch {}
+    scheduleSave();
+  }
+
+  function onRowKey(e, i, tx) {
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      const cur = C.serializeRows(rows).split('\n')[i] ?? '';
+      let cont = { task: false, style: null };
+      try { cont = C.continuationPrefix(cur); } catch {}
+      const indent = (rows[i] && rows[i].indent) || '';
+      rows.splice(i + 1, 0, cont.task
+        ? { task: true, done: false, style: cont.style || 'box', indent, content: '' }
+        : { task: false, content: '', raw: '' });
+      renderChecklist(i + 1, 0);
+      scheduleSave();
+      return;
+    }
+    if (e.key === 'Backspace' && caretAtStart(tx)) {
+      e.preventDefault();
+      try {
+        const m = C.mergeLineUp(C.serializeRows(rows), i);
+        syncModelFromText(m.text);
+        renderChecklist(Math.max(0, m.row), 'end');
+      } catch {
+        if (!String(tx.textContent).trim()) { rows.splice(i, 1); renderChecklist(Math.max(0, i - 1), 'end'); }
+      }
+      scheduleSave();
+      return;
+    }
+  }
+
+  function onRowPaste(e, i, tx) {
+    try {
+      e.preventDefault();
+      const clip = (e.clipboardData || window.clipboardData);
+      const text = clip ? clip.getData('text/plain') : '';
+      if (!text) return;
+      const parts = String(text).split('\n');
+      if (parts.length <= 1) {
+        document.execCommand('insertText', false, text);
+        return;
+      }
+      // Multi-line paste splits into rows at the caret row.
+      const sel = window.getSelection();
+      const before = tx.textContent.slice(0, sel && sel.rangeCount ? sel.getRangeAt(0).startOffset : tx.textContent.length);
+      const after = tx.textContent.slice(before.length);
+      const first = before + parts[0];
+      const last = parts[parts.length - 1] + after;
+      const cur = rows[i];
+      const mkRow = (content) => cur.task
+        ? { task: true, done: false, style: cur.style || 'box', indent: cur.indent || '', content }
+        : { task: false, content, raw: content };
+      const newRows = [first, ...parts.slice(1, -1), last].map(mkRow);
+      rows.splice(i, 1, ...newRows);
+      renderChecklist(i + newRows.length - 1, 'end');
+      scheduleSave();
+    } catch {
+      try { document.execCommand('insertText', false, ((e.clipboardData || {}).getData || (() => ''))('text/plain')); } catch {}
+    }
+  }
+
+  /* ---------------- open / render ---------------- */
+  function popCard() {
+    try { card.style.animation = 'none'; void card.offsetWidth; card.style.animation = ''; } catch {}
+  }
+  function applyView() {
+    const check = view !== 'text';
+    clList.style.display = check ? '' : 'none';
+    ta.style.display = check ? 'none' : '';
+    document.getElementById('todo').classList.toggle('on', !check);
+  }
+  async function setView(v) {
+    if (v === view) { applyView(); return; }
+    if (v === 'text') {
+      ta.value = bodyText();
+      view = 'text';
+    } else {
+      syncModelFromText(ta.value);
+      view = 'check';
+      renderChecklist();
+    }
+    applyView();
+    // Persist the explicit choice on the note so it sticks across opens.
+    if (id) {
+      try { await flushAll(); } catch {}
+      try { note = await window.api.notesUpdate(id, { textMode: view === 'text' }) || note; } catch {}
+    }
+  }
+
+  async function open(noteId) {
+    const seq = ++openSeq;
+    if (!noteId) {
+      try { const created = await window.api.notesCreate({}); noteId = created.id; } catch { return; }
+    }
+    const n = await window.api.notesGet(noteId);
+    if (seq !== openSeq) return;
+    if (!n) { try { window.api.tuckNote(); } catch {} return; }
+    id = n.id;
+    note = n;
+    clearTimeout(saveT); saveT = null; dirty = false;
+    clearTimeout(delArm); delArm = null;
+    const delBtn = document.getElementById('del');
+    delBtn.classList.remove('confirming'); delBtn.textContent = 'Delete';
+    ta.disabled = false;
+    applyColor();
+    titleInput.value = n.title || 'New note';
+    // The view is per-note state, not a global default: an explicit toggle
+    // choice (textMode) always wins; otherwise taskless prose opens as text.
+    try { view = (C && C.preferredView(n)) || 'check'; } catch { view = 'check'; }
+    syncModelFromText(n.body || '');
+    ta.value = n.body || '';
+    renderChecklist();
+    applyView();
+    setPinUI(!!n.pinned);
+    updateArchBtn();
+    if (findOpen) toggleFind(false);
+    qEl.value = '';
+    savedEl.textContent = '';
+    popCard();
+    try {
+      const first = clList.querySelector('.cltext');
+      if (first) first.focus({ preventScroll: true });
+    } catch {}
+  }
+
+  /* ---------------- save: one debounce, one IPC ---------------- */
+  function scheduleSave() {
+    dirty = true;
+    savedEl.textContent = 'Saving…';
+    clearTimeout(saveT);
+    saveT = setTimeout(flushAll, 300);
+  }
+  async function flushAll() {
+    clearTimeout(saveT); saveT = null;
+    if (!id || !dirty) return;
+    dirty = false;
+    try {
+      note = await window.api.notesUpdate(id, {
+        title: titleInput.value.trim() || 'New note',
+        body: bodyText(),
+      });
+      flashSaved();
+    } catch { dirty = true; savedEl.textContent = 'Not saved'; }
+  }
+  function flashSaved() {
+    if (dirty) return;
+    savedEl.textContent = 'Saved · now';
+  }
+
+  titleInput.addEventListener('input', scheduleSave);
+  titleInput.addEventListener('blur', flushAll);
+  ta.addEventListener('input', scheduleSave);
+  ta.addEventListener('blur', flushAll);
+  window.addEventListener('blur', flushAll);
+  window.addEventListener('beforeunload', () => { if (dirty && id) { try { window.api.notesUpdate(id, { body: bodyText(), title: titleInput.value.trim() || 'New note' }); } catch {} } });
+
+  /* ---------------- header actions ---------------- */
+  function setPinUI(pinned) {
+    const b = document.getElementById('pin');
+    b.classList.toggle('on', pinned);
+    b.title = pinned ? 'Unpin (Ctrl+P)' : 'Pin so it stays open (Ctrl+P)';
+  }
+  async function togglePin() {
+    if (!id) return;
+    await flushAll();
+    const next = !(note && note.pinned);
+    try { note = await window.api.notesUpdate(id, { pinned: next }); } catch { return; }
+    setPinUI(next);
+    flashSaved();
+  }
+
+  async function closeNote() {
+    await flushAll();
+    try { window.api.tuckNote(); } catch {}
+  }
+
+  function pressGuard(fn) {
+    return {
+      down: (e) => { if (!document.hasFocus()) { e.preventDefault(); suppressClickUntil = Date.now() + 500; fn(); } },
+      click: () => { if (Date.now() < suppressClickUntil) return; fn(); },
+    };
+  }
+  const tuckPress = pressGuard(closeNote);
+  const pinPress = pressGuard(togglePin);
+  document.getElementById('tuck').addEventListener('mousedown', tuckPress.down);
+  document.getElementById('tuck').addEventListener('click', tuckPress.click);
+  document.getElementById('pin').addEventListener('mousedown', pinPress.down);
+  document.getElementById('pin').addEventListener('click', pinPress.click);
+
+  /* ---------------- footer actions ---------------- */
+  document.getElementById('del').addEventListener('click', deleteNote);
+  document.getElementById('arch').addEventListener('click', toggleArchive);
+  document.getElementById('todo').addEventListener('click', () => setView(view === 'text' ? 'check' : 'text'));
+
+  function updateArchBtn() {
+    document.getElementById('arch').textContent = (note && note.archived) ? 'Unarchive' : 'Archive';
+  }
+  async function toggleArchive() {
+    if (!id) return;
+    await flushAll();
+    const next = !(note && note.archived);
+    try { note = await window.api.notesUpdate(id, { archived: next }); } catch { return; }
+    updateArchBtn();
+    try { window.api.tuckNote(); } catch {}
+  }
+
+  async function deleteNote() {
+    const btn = document.getElementById('del');
+    if (!delArm) {
+      btn.classList.add('confirming');
+      btn.textContent = 'Sure?';
+      delArm = setTimeout(() => { delArm = null; btn.classList.remove('confirming'); btn.textContent = 'Delete'; }, 3000);
+      return;
+    }
+    clearTimeout(delArm); delArm = null;
+    btn.classList.remove('confirming');
+    btn.textContent = 'Delete';
+
+    if (!id) return;
+    await flushAll();
+    try { await window.api.notesRemove(id); } catch {}
+    id = null;
+    try { window.api.tuckNote(); } catch {}
+  }
+
+  /* ---------------- task + find (keyboard) ---------------- */
+  function toggleTask() {
+    if (view === 'text') {
+      const v = ta.value;
+      const pos = ta.selectionStart ?? v.length;
+      const start = v.lastIndexOf('\n', pos - 1) + 1;
+      const lineEnd = v.indexOf('\n', pos); const end = lineEnd === -1 ? v.length : lineEnd;
+      const idx = v.slice(0, start).split('\n').length - 1;
+      try {
+        syncModelFromText(v);
+        ta.value = C.toggleLine(v, idx);
+        const caret = start + (ta.value.split('\n')[idx] || '').length;
+        ta.setSelectionRange(caret, caret);
+      } catch {}
+      scheduleSave();
+      return;
+    }
+    const focusIdx = (() => {
+      const ae = document.activeElement;
+      if (ae && ae.classList && ae.classList.contains('cltext')) {
+        const i = Number(ae.dataset.idx);
+        if (Number.isFinite(i)) return i;
+      }
+      return Math.min(lastRow, rows.length - 1);
+    })();
+    if (focusIdx >= 0) toggleRow(focusIdx);
+  }
+  let findIdx = -1;
+  function toggleFind(force) {
+    findOpen = force !== undefined ? force : !findOpen;
+    findEl.classList.toggle('show', findOpen);
+    if (findOpen) { qEl.value = ''; findIdx = -1; qEl.focus(); }
+    else {
+      const first = clList.querySelector('.cltext');
+      if (view !== 'text' && first) first.focus();
+      else ta.focus();
+    }
+  }
+  qEl.addEventListener('input', () => { findIdx = -1; runFind(true); });
+  qEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); runFind(true); }
+    if (e.key === 'Escape') { e.preventDefault(); toggleFind(false); }
+    e.stopPropagation();
+  });
+  function runFind(advance) {
+    const q = qEl.value;
+    if (!q) return;
+    const needle = q.toLowerCase();
+    if (view === 'text') {
+      const hay = ta.value.toLowerCase();
+      let from = advance && findIdx >= 0 ? findIdx + 1 : ta.selectionStart;
+      let i = hay.indexOf(needle, from);
+      if (i === -1) i = hay.indexOf(needle, 0);
+      if (i === -1) { findIdx = -1; return; }
+      findIdx = i;
+      ta.focus();
+      ta.setSelectionRange(i, i + needle.length);
+      return;
+    }
+    // checklist view: find across rows, scroll into view, select the match
+    const texts = rows.map((r) => (r.task ? r.content : (r.raw != null ? r.raw : '')));
+    let startRow = 0;
+    if (advance && findIdx >= 0) {
+      // continue after the last match: recompute flat offset
+      const flat = texts.join('\n').toLowerCase();
+      let i = flat.indexOf(needle, findIdx + 1);
+      if (i === -1) i = flat.indexOf(needle, 0);
+      if (i === -1) { findIdx = -1; return; }
+      findIdx = i;
+    } else {
+      const flat = texts.join('\n').toLowerCase();
+      let i = flat.indexOf(needle, 0);
+      if (i === -1) { findIdx = -1; return; }
+      findIdx = i;
+      startRow = 0;
+    }
+    let acc = 0;
+    for (let ri = startRow; ri < texts.length; ri++) {
+      const t = String(texts[ri] || '');
+      const rowStart = acc;
+      acc += t.length + 1;
+      if (findIdx >= rowStart && findIdx < rowStart + t.length) {
+        const rowEl = clList.children[ri];
+        if (!rowEl) return;
+        const tx = rowEl.querySelector('.cltext');
+        if (!tx) return;
+        try { rowEl.scrollIntoView({ block: 'nearest' }); } catch {}
+        try {
+          tx.focus({ preventScroll: true });
+          const off = findIdx - rowStart;
+          const range = document.createRange();
+          const walker = document.createTreeWalker(tx, NodeFilter.SHOW_TEXT);
+          let node = walker.nextNode();
+          let remaining = off;
+          let startNode = null, startOff = 0;
+          while (node) {
+            if (remaining <= node.length) { startNode = node; startOff = remaining; break; }
+            remaining -= node.length;
+            node = walker.nextNode();
+          }
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          if (startNode) {
+            range.setStart(startNode, startOff);
+            range.setEnd(startNode, Math.min(startNode.length, startOff + needle.length));
+            sel.addRange(range);
+          }
+        } catch { try { tx.focus(); } catch {} }
+        lastRow = ri;
+        return;
+      }
+    }
+  }
+
+  /* ---------------- keyboard ---------------- */
+  document.addEventListener('keydown', (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (e.key === 'Escape') { e.preventDefault(); if (findOpen) toggleFind(false); else closeNote(); return; }
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+    if (k === 't' && e.shiftKey) { e.preventDefault(); setView(view === 'text' ? 'check' : 'text'); }
+    else if (k === 't') { e.preventDefault(); toggleTask(); }
+    else if (k === 'p' && !e.shiftKey) { e.preventDefault(); togglePin(); }
+    else if (k === 'f') { e.preventDefault(); toggleFind(); }
+    else if (k === 's') { e.preventDefault(); flushAll(); }
+  });
+
+  window.api.onEditorOpen((n) => open(n));
+
+  try {
+    window.api.onNotes(async () => {
+      if (!id) return;
+      let cur = null;
+      try { cur = await window.api.notesGet(id); } catch { cur = null; }
+      if (!cur) { try { window.api.tuckNote(); } catch {} }
+    });
+  } catch {}
+
+  buildSwatches();
+})();
+</script>
+</body>
+</html>
